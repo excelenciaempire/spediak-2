@@ -1,14 +1,16 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ScrollView, ActivityIndicator } from 'react-native';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { Colors } from '@/constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, Link } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
+import { useAuth } from '@/context/AuthContext';
 
 export default function SignupScreen() {
   const colorScheme = useColorScheme() || 'light';
   const router = useRouter();
+  const { signup, error, isLoading, clearError } = useAuth();
   
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -16,9 +18,21 @@ export default function SignupScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [state, setState] = useState('North Carolina');
   const [passwordVisible, setPasswordVisible] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSignup = () => {
+  // Clear any auth errors when component mounts or unmounts
+  useEffect(() => {
+    clearError();
+    return () => clearError();
+  }, [clearError]);
+
+  // Show error alert if there's an authentication error
+  useEffect(() => {
+    if (error) {
+      Alert.alert('Registration Error', error);
+    }
+  }, [error]);
+
+  const handleSignup = async () => {
     // Validate inputs
     if (!fullName || !email || !password || !confirmPassword) {
       Alert.alert('Error', 'Please fill in all fields');
@@ -44,15 +58,8 @@ export default function SignupScreen() {
       return;
     }
 
-    setIsLoading(true);
-
-    // In a real app, this would make an API call to register the user
-    setTimeout(() => {
-      setIsLoading(false);
-      
-      // Navigate to email verification screen
-      router.push('/(auth)/verify-email');
-    }, 1500);
+    // Use the signup function from AuthContext
+    await signup(email, password, fullName, state);
   };
 
   return (
@@ -89,6 +96,7 @@ export default function SignupScreen() {
             placeholderTextColor={Colors[colorScheme as 'light' | 'dark'].tabIconDefault}
             value={fullName}
             onChangeText={setFullName}
+            editable={!isLoading}
           />
         </View>
 
@@ -115,6 +123,7 @@ export default function SignupScreen() {
             onChangeText={setEmail}
             keyboardType="email-address"
             autoCapitalize="none"
+            editable={!isLoading}
           />
         </View>
 
@@ -140,10 +149,12 @@ export default function SignupScreen() {
             value={password}
             onChangeText={setPassword}
             secureTextEntry={!passwordVisible}
+            editable={!isLoading}
           />
           <TouchableOpacity
             style={styles.passwordVisibilityToggle}
             onPress={() => setPasswordVisible(!passwordVisible)}
+            disabled={isLoading}
           >
             <Ionicons
               name={passwordVisible ? 'eye-off-outline' : 'eye-outline'}
@@ -175,6 +186,7 @@ export default function SignupScreen() {
             value={confirmPassword}
             onChangeText={setConfirmPassword}
             secureTextEntry={!passwordVisible}
+            editable={!isLoading}
           />
         </View>
 
@@ -198,30 +210,14 @@ export default function SignupScreen() {
             <Picker
               selectedValue={state}
               onValueChange={(itemValue: string) => setState(itemValue)}
-              style={[
-                styles.picker, 
-                { color: Colors[colorScheme as 'light' | 'dark'].text }
-              ]}
-              dropdownIconColor={Colors[colorScheme as 'light' | 'dark'].text}
+              enabled={!isLoading}
+              style={{ color: Colors[colorScheme as 'light' | 'dark'].text }}
+              dropdownIconColor={Colors[colorScheme as 'light' | 'dark'].tabIconDefault}
             >
               <Picker.Item label="North Carolina" value="North Carolina" />
               <Picker.Item label="South Carolina" value="South Carolina" />
             </Picker>
           </View>
-        </View>
-
-        {/* Terms and Conditions */}
-        <View style={styles.termsContainer}>
-          <Text style={[styles.termsText, { color: Colors[colorScheme as 'light' | 'dark'].text }]}>
-            By signing up, you agree to our{' '}
-            <Text style={[styles.termsLink, { color: Colors[colorScheme as 'light' | 'dark'].accent }]}>
-              Terms of Service
-            </Text>{' '}
-            and{' '}
-            <Text style={[styles.termsLink, { color: Colors[colorScheme as 'light' | 'dark'].accent }]}>
-              Privacy Policy
-            </Text>
-          </Text>
         </View>
 
         {/* Signup Button */}
@@ -234,23 +230,26 @@ export default function SignupScreen() {
           onPress={handleSignup}
           disabled={isLoading}
         >
-          <Text style={styles.signupButtonText}>
-            {isLoading ? 'Creating Account...' : 'Create Account'}
-          </Text>
+          {isLoading ? (
+            <ActivityIndicator color="#FFFFFF" size="small" />
+          ) : (
+            <Text style={styles.signupButtonText}>Create Account</Text>
+          )}
         </TouchableOpacity>
 
-        {/* Already have an account */}
-        <TouchableOpacity 
-          style={styles.loginLinkContainer}
-          onPress={() => router.back()}
-        >
-          <Text style={[styles.loginLinkText, { color: Colors[colorScheme as 'light' | 'dark'].text }]}>
-            Already have an account?{' '}
-            <Text style={[styles.loginLink, { color: Colors[colorScheme as 'light' | 'dark'].accent }]}>
-              Sign In
-            </Text>
+        {/* Sign In Link */}
+        <View style={styles.signinContainer}>
+          <Text style={[styles.signinText, { color: Colors[colorScheme as 'light' | 'dark'].text }]}>
+            Already have an account?
           </Text>
-        </TouchableOpacity>
+          <Link href="/(auth)/login" asChild>
+            <TouchableOpacity disabled={isLoading}>
+              <Text style={[styles.signinLink, { color: Colors[colorScheme as 'light' | 'dark'].accent }]}>
+                Sign In
+              </Text>
+            </TouchableOpacity>
+          </Link>
+        </View>
       </View>
     </ScrollView>
   );
@@ -348,6 +347,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   loginLink: {
+    fontWeight: '600',
+  },
+  signinContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 30,
+  },
+  signinText: {
+    fontSize: 15,
+  },
+  signinLink: {
     fontWeight: '600',
   },
 }); 

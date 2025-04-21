@@ -1,30 +1,75 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Image, Alert } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Image, Alert, ActivityIndicator } from 'react-native';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { Colors } from '@/constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
-
-// Mock user data
-const MOCK_USER = {
-  fullName: 'John Smith',
-  email: 'john.smith@example.com',
-  state: 'North Carolina',
-  profileImageUrl: null, // Default is null, can be a URL
-};
+import * as ImagePicker from 'expo-image-picker';
+import { useAuth } from '@/context/AuthContext';
+import { userApi } from '@/services/api';
+import { useNavigation } from '@react-navigation/native';
+import DrawerButton from '@/components/DrawerButton';
 
 export default function ProfileSettingsScreen() {
   const colorScheme = useColorScheme() || 'light';
-  const [fullName, setFullName] = useState(MOCK_USER.fullName);
-  const [email] = useState(MOCK_USER.email); // Email is read-only
+  const { user, token } = useAuth();
+  const navigation = useNavigation();
+  
+  // Set up the drawer menu button in the header
+  React.useLayoutEffect(() => {
+    navigation.setOptions({
+      headerLeft: () => <DrawerButton />,
+    });
+  }, [navigation]);
+  
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [state, setState] = useState(MOCK_USER.state);
+  const [state, setState] = useState('North Carolina');
+  const [profileImageUrl, setProfileImageUrl] = useState<string | undefined>(undefined);
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handlePasswordChange = () => {
+  // Fetch user profile when component mounts
+  const fetchUserProfile = useCallback(async () => {
+    if (!user || !token) return;
+    
+    try {
+      setError(null);
+      setIsLoading(true);
+      
+      const response = await userApi.getProfile(user.id, token);
+      
+      if (!response.success || !response.data) {
+        throw new Error(response.message || 'Failed to fetch profile');
+      }
+      
+      const userData = response.data.user;
+      
+      // Update local state with user data
+      setFullName(userData.fullName || '');
+      setEmail(userData.email || '');
+      setState(userData.state || 'North Carolina');
+      setProfileImageUrl(userData.profileImageUrl || undefined);
+    } catch (error: any) {
+      console.error('Error fetching profile:', error);
+      setError(error.message || 'Failed to load profile. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user, token]);
+
+  useEffect(() => {
+    fetchUserProfile();
+  }, [fetchUserProfile]);
+
+  const handlePasswordChange = async () => {
     // Validate password fields
     if (!currentPassword) {
       Alert.alert('Error', 'Please enter your current password');
@@ -41,19 +86,78 @@ export default function ProfileSettingsScreen() {
       return;
     }
 
-    // In a real app, this would call an API to update the password
-    Alert.alert('Success', 'Password updated successfully');
-    
-    // Clear password fields
-    setCurrentPassword('');
-    setNewPassword('');
-    setConfirmPassword('');
+    // Password strength validation - at least 8 characters
+    if (newPassword.length < 8) {
+      Alert.alert('Error', 'Password must be at least 8 characters long');
+      return;
+    }
+
+    if (!user || !token) {
+      Alert.alert('Error', 'You must be logged in to change your password');
+      return;
+    }
+
+    setIsChangingPassword(true);
+    setError(null);
+
+    try {
+      const response = await userApi.updatePassword(
+        user.id,
+        currentPassword,
+        newPassword,
+        token
+      );
+      
+      if (!response.success) {
+        throw new Error(response.message || 'Failed to update password');
+      }
+      
+      // Clear password fields
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      
+      Alert.alert('Success', 'Password updated successfully');
+    } catch (error: any) {
+      console.error('Error updating password:', error);
+      Alert.alert('Error', error.message || 'Failed to update password. Please try again.');
+    } finally {
+      setIsChangingPassword(false);
+    }
   };
 
-  const handleSaveProfile = () => {
-    // In a real app, this would call an API to update the profile
-    Alert.alert('Success', 'Profile updated successfully');
-    setIsEditing(false);
+  const handleSaveProfile = async () => {
+    if (!user || !token) {
+      Alert.alert('Error', 'You must be logged in to update your profile');
+      return;
+    }
+
+    setIsSaving(true);
+    setError(null);
+
+    try {
+      const response = await userApi.updateProfile(
+        user.id,
+        {
+          fullName,
+          state,
+          profileImageUrl
+        },
+        token
+      );
+      
+      if (!response.success || !response.data) {
+        throw new Error(response.message || 'Failed to update profile');
+      }
+      
+      Alert.alert('Success', 'Profile updated successfully');
+      setIsEditing(false);
+    } catch (error: any) {
+      console.error('Error updating profile:', error);
+      Alert.alert('Error', error.message || 'Failed to update profile. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const toggleEdit = () => {
@@ -66,29 +170,99 @@ export default function ProfileSettingsScreen() {
     }
   };
 
+  const pickImage = async () => {
+    if (!isEditing) {
+      Alert.alert('Info', 'Enable edit mode to change your profile picture');
+      return;
+    }
+    
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      // In a production app, we would upload this to a storage service
+      // and update the profileImageUrl with the cloud URL
+      setProfileImageUrl(result.assets[0].uri);
+    }
+  };
+
+  const takePhoto = async () => {
+    if (!isEditing) {
+      Alert.alert('Info', 'Enable edit mode to change your profile picture');
+      return;
+    }
+    
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Required', 'Camera permission is required');
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      // In a production app, we would upload this to a storage service
+      setProfileImageUrl(result.assets[0].uri);
+    }
+  };
+
   const changeProfilePicture = () => {
     Alert.alert(
       'Profile Picture',
       'Choose an option',
       [
-        { text: 'Take Photo', onPress: () => console.log('Take Photo pressed') },
-        { text: 'Choose from Gallery', onPress: () => console.log('Gallery pressed') },
+        { text: 'Take Photo', onPress: takePhoto },
+        { text: 'Choose from Gallery', onPress: pickImage },
         { text: 'Cancel', style: 'cancel' },
       ]
     );
   };
+
+  // Show loading indicator while fetching data
+  if (isLoading) {
+    return (
+      <View style={[styles.loadingContainer, { backgroundColor: Colors[colorScheme as 'light' | 'dark'].background }]}>
+        <ActivityIndicator size="large" color={Colors[colorScheme as 'light' | 'dark'].accent} />
+        <Text style={[styles.loadingText, { color: Colors[colorScheme as 'light' | 'dark'].text }]}>
+          Loading profile...
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <ScrollView 
       style={[styles.container, { backgroundColor: Colors[colorScheme as 'light' | 'dark'].background }]}
       contentContainerStyle={styles.contentContainer}
     >
+      {error && (
+        <View style={styles.errorContainer}>
+          <Text style={[styles.errorText, { color: Colors[colorScheme as 'light' | 'dark'].error }]}>
+            {error}
+          </Text>
+          <TouchableOpacity 
+            style={[styles.retryButton, { backgroundColor: Colors[colorScheme as 'light' | 'dark'].accent }]}
+            onPress={fetchUserProfile}
+          >
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Profile Image Section */}
       <View style={styles.profileImageContainer}>
-        <TouchableOpacity onPress={changeProfilePicture}>
-          {MOCK_USER.profileImageUrl ? (
+        <TouchableOpacity onPress={changeProfilePicture} disabled={!isEditing || isSaving}>
+          {profileImageUrl ? (
             <Image
-              source={{ uri: MOCK_USER.profileImageUrl }}
+              source={{ uri: profileImageUrl }}
               style={styles.profileImage}
             />
           ) : (
@@ -99,13 +273,15 @@ export default function ProfileSettingsScreen() {
               ]}
             >
               <Text style={[styles.profileInitials, { color: Colors[colorScheme as 'light' | 'dark'].secondary }]}>
-                {MOCK_USER.fullName.split(' ').map(n => n[0]).join('')}
+                {fullName.split(' ').map(n => n[0]).join('')}
               </Text>
             </View>
           )}
-          <View style={[styles.editBadge, { backgroundColor: Colors[colorScheme as 'light' | 'dark'].accent }]}>
-            <Ionicons name="camera" size={16} color="#FFFFFF" />
-          </View>
+          {isEditing && (
+            <View style={[styles.editBadge, { backgroundColor: Colors[colorScheme as 'light' | 'dark'].accent }]}>
+              <Ionicons name="camera" size={16} color="#FFFFFF" />
+            </View>
+          )}
         </TouchableOpacity>
       </View>
 
@@ -115,9 +291,9 @@ export default function ProfileSettingsScreen() {
           <Text style={[styles.sectionTitle, { color: Colors[colorScheme as 'light' | 'dark'].text }]}>
             Personal Information
           </Text>
-          <TouchableOpacity onPress={toggleEdit}>
+          <TouchableOpacity onPress={toggleEdit} disabled={isSaving}>
             <Text style={[styles.editButton, { color: Colors[colorScheme as 'light' | 'dark'].accent }]}>
-              {isEditing ? 'Save' : 'Edit'}
+              {isEditing ? (isSaving ? 'Saving...' : 'Save') : 'Edit'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -136,7 +312,7 @@ export default function ProfileSettingsScreen() {
             ]}
             value={fullName}
             onChangeText={setFullName}
-            editable={isEditing}
+            editable={isEditing && !isSaving}
           />
         </View>
 
@@ -173,7 +349,7 @@ export default function ProfileSettingsScreen() {
             <Picker
               selectedValue={state}
               onValueChange={(itemValue: string) => setState(itemValue)}
-              enabled={isEditing}
+              enabled={isEditing && !isSaving}
               style={[
                 styles.picker, 
                 { color: Colors[colorScheme as 'light' | 'dark'].text }
@@ -200,25 +376,25 @@ export default function ProfileSettingsScreen() {
             <TextInput
               style={[
                 styles.input,
-                styles.passwordInput,
                 { 
                   color: Colors[colorScheme as 'light' | 'dark'].text,
-                  backgroundColor: Colors[colorScheme as 'light' | 'dark'].secondary,
-                  borderColor: '#eeeeee',
+                  backgroundColor: Colors[colorScheme as 'light' | 'dark'].secondary
                 }
               ]}
+              placeholder="Enter current password"
+              placeholderTextColor={Colors[colorScheme as 'light' | 'dark'].tabIconDefault}
               value={currentPassword}
               onChangeText={setCurrentPassword}
               secureTextEntry={!passwordVisible}
-              placeholder="Enter current password"
-              placeholderTextColor={Colors[colorScheme as 'light' | 'dark'].tabIconDefault}
+              editable={!isChangingPassword}
             />
             <TouchableOpacity
-              style={styles.passwordVisibility}
+              style={styles.passwordVisibilityToggle}
               onPress={() => setPasswordVisible(!passwordVisible)}
+              disabled={isChangingPassword}
             >
               <Ionicons
-                name={passwordVisible ? 'eye-off' : 'eye'}
+                name={passwordVisible ? 'eye-off-outline' : 'eye-outline'}
                 size={22}
                 color={Colors[colorScheme as 'light' | 'dark'].tabIconDefault}
               />
@@ -234,15 +410,15 @@ export default function ProfileSettingsScreen() {
               styles.input,
               { 
                 color: Colors[colorScheme as 'light' | 'dark'].text,
-                backgroundColor: Colors[colorScheme as 'light' | 'dark'].secondary,
-                borderColor: '#eeeeee',
+                backgroundColor: Colors[colorScheme as 'light' | 'dark'].secondary
               }
             ]}
+            placeholder="Enter new password"
+            placeholderTextColor={Colors[colorScheme as 'light' | 'dark'].tabIconDefault}
             value={newPassword}
             onChangeText={setNewPassword}
             secureTextEntry={!passwordVisible}
-            placeholder="Enter new password"
-            placeholderTextColor={Colors[colorScheme as 'light' | 'dark'].tabIconDefault}
+            editable={!isChangingPassword}
           />
         </View>
 
@@ -254,28 +430,33 @@ export default function ProfileSettingsScreen() {
               styles.input,
               { 
                 color: Colors[colorScheme as 'light' | 'dark'].text,
-                backgroundColor: Colors[colorScheme as 'light' | 'dark'].secondary,
-                borderColor: '#eeeeee',
+                backgroundColor: Colors[colorScheme as 'light' | 'dark'].secondary
               }
             ]}
+            placeholder="Confirm new password"
+            placeholderTextColor={Colors[colorScheme as 'light' | 'dark'].tabIconDefault}
             value={confirmPassword}
             onChangeText={setConfirmPassword}
             secureTextEntry={!passwordVisible}
-            placeholder="Confirm new password"
-            placeholderTextColor={Colors[colorScheme as 'light' | 'dark'].tabIconDefault}
+            editable={!isChangingPassword}
           />
         </View>
 
+        {/* Change Password Button */}
         <TouchableOpacity
           style={[
-            styles.updatePasswordButton,
-            { backgroundColor: Colors[colorScheme as 'light' | 'dark'].accent }
+            styles.changePasswordButton,
+            { backgroundColor: Colors[colorScheme as 'light' | 'dark'].accent },
+            isChangingPassword && styles.disabledButton
           ]}
           onPress={handlePasswordChange}
+          disabled={isChangingPassword}
         >
-          <Text style={styles.updatePasswordButtonText}>
-            Update Password
-          </Text>
+          {isChangingPassword ? (
+            <ActivityIndicator color="#FFFFFF" size="small" />
+          ) : (
+            <Text style={styles.changePasswordButtonText}>Change Password</Text>
+          )}
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -289,42 +470,70 @@ const styles = StyleSheet.create({
   contentContainer: {
     padding: 16,
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 15,
+    fontSize: 16,
+  },
+  errorContainer: {
+    padding: 16,
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  errorText: {
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  retryButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+  },
   profileImageContainer: {
     alignItems: 'center',
-    marginVertical: 20,
+    marginVertical: 24,
   },
   profileImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
   },
   defaultProfileImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    alignItems: 'center',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
     justifyContent: 'center',
+    alignItems: 'center',
   },
   profileInitials: {
-    fontSize: 36,
+    fontSize: 40,
     fontWeight: 'bold',
   },
   editBadge: {
     position: 'absolute',
     bottom: 0,
     right: 0,
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    alignItems: 'center',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     justifyContent: 'center',
+    alignItems: 'center',
     borderWidth: 2,
     borderColor: 'white',
   },
   formSection: {
-    marginBottom: 24,
     backgroundColor: 'transparent',
     borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -338,20 +547,20 @@ const styles = StyleSheet.create({
   },
   editButton: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: 'bold',
   },
   formGroup: {
     marginBottom: 16,
   },
   label: {
     fontSize: 14,
-    marginBottom: 6,
+    marginBottom: 8,
   },
   input: {
-    height: 50,
     borderWidth: 1,
     borderRadius: 8,
     paddingHorizontal: 12,
+    paddingVertical: 10,
     fontSize: 16,
   },
   readOnlyInput: {
@@ -360,32 +569,30 @@ const styles = StyleSheet.create({
   pickerContainer: {
     borderWidth: 1,
     borderRadius: 8,
-    height: 50,
-    justifyContent: 'center',
+    overflow: 'hidden',
   },
   picker: {
     height: 50,
-    width: '100%',
   },
   passwordContainer: {
     position: 'relative',
   },
-  passwordInput: {
-    paddingRight: 50, // Space for the visibility toggle
-  },
-  passwordVisibility: {
+  passwordVisibilityToggle: {
     position: 'absolute',
     right: 12,
     top: 12,
   },
-  updatePasswordButton: {
+  disabledButton: {
+    opacity: 0.7,
+  },
+  changePasswordButton: {
     height: 50,
     borderRadius: 25,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 8,
   },
-  updatePasswordButtonText: {
+  changePasswordButtonText: {
     color: 'white',
     fontWeight: 'bold',
     fontSize: 16,

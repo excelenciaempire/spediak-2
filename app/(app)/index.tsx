@@ -4,10 +4,14 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { Colors } from '@/constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import * as Clipboard from 'expo-clipboard';
+import { useAuth } from '@/context/AuthContext';
+import { inspectionApi } from '@/services/api';
+import { useNavigation } from '@react-navigation/native';
+import DrawerButton from '@/components/DrawerButton';
 // Note: expo-speech-recognition might not be directly available
 // In a real implementation, you would use expo-speech or a similar package
 // For this example, we'll mock the interface
-// import * as Speech from 'expo-speech-recognition';
 
 // Mock Speech Recognition interface
 const Speech = {
@@ -34,12 +38,24 @@ interface SpeechResult {
 
 export default function NewInspectionScreen() {
   const colorScheme = useColorScheme() || 'light'; // Provide a default value
+  const { user, token } = useAuth();
+  const navigation = useNavigation();
+  
+  // Set up the drawer menu button in the header
+  React.useLayoutEffect(() => {
+    navigation.setOptions({
+      headerLeft: () => <DrawerButton />,
+    });
+  }, [navigation]);
+  
   const [image, setImage] = useState<string | null>(null);
   const [description, setDescription] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [ddidResponse, setDdidResponse] = useState<string | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   // Check if either image or description is missing
   const isGenerateDisabled = !image || !description;
@@ -150,30 +166,70 @@ export default function NewInspectionScreen() {
   };
 
   const handleGenerateDDID = async () => {
-    if (isGenerateDisabled) return;
+    if (isGenerateDisabled || !user || !token) return;
 
     setIsLoading(true);
+    setApiError(null);
 
     try {
-      // In a real app, this would make an API call to the backend
-      // For demonstration, we'll simulate an API call
-      setTimeout(() => {
-        const mockResponse = `DDID Statement: The inspector observed water damage on the ceiling below the upstairs bathroom. This is a defect because it indicates a water leak from the plumbing or the shower/tub enclosure above. The moisture can lead to structural damage, mold growth, and deterioration of building materials if not addressed. 
-
-The inspector recommends having a licensed plumber evaluate the source of the leak and make necessary repairs. Additionally, once the leak is fixed, the affected ceiling material should be replaced or repaired by a qualified contractor.`;
-        
-        setDdidResponse(mockResponse);
-        setIsLoading(false);
-        setModalVisible(true);
-      }, 2000);
-    } catch (error) {
+      // In a production app, we would upload the image to a storage service
+      // and then pass the URL to the API. For now, we'll use the local URI.
+      const imageUrl = image; // This would be replaced with a cloud storage URL in production
+      
+      // Call the API to generate DDID
+      const response = await inspectionApi.generateDDID(
+        imageUrl,
+        description,
+        user.state,
+        token
+      );
+      
+      if (!response.success || !response.data) {
+        throw new Error(response.message || 'Failed to generate DDID');
+      }
+      
+      setDdidResponse(response.data.ddidResponse);
+      setModalVisible(true);
+      
+      // After getting a successful DDID, automatically save the inspection
+      await saveInspection(response.data.ddidResponse);
+    } catch (error: any) {
       console.error('Error generating DDID:', error);
-      setIsLoading(false);
+      setApiError(error.message || 'There was a problem generating the DDID response. Please try again.');
       Alert.alert(
         'Error',
-        'There was a problem generating the DDID response. Please check your connection and try again.',
+        error.message || 'There was a problem generating the DDID response. Please try again.',
         [{ text: 'Try Again' }]
       );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const saveInspection = async (generatedDdid: string) => {
+    if (!user || !token || !image) return;
+    
+    setIsSaving(true);
+    
+    try {
+      // Save the inspection to the backend
+      const response = await inspectionApi.saveInspection(
+        user.id,
+        image, // This would be replaced with a cloud storage URL in production
+        description,
+        generatedDdid,
+        token
+      );
+      
+      if (!response.success) {
+        console.warn('Warning: Inspection saved, but record could not be stored:', response.message);
+      }
+    } catch (error) {
+      console.error('Error saving inspection:', error);
+      // We don't show an error to the user here since the DDID was generated successfully
+      // The user can still view and copy the DDID
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -193,6 +249,7 @@ The inspector recommends having a licensed plumber evaluate the source of the le
               setImage(null);
               setDescription('');
               setDdidResponse(null);
+              setApiError(null);
             },
             style: 'destructive',
           },
@@ -202,9 +259,17 @@ The inspector recommends having a licensed plumber evaluate the source of the le
     }
   };
 
-  const copyToClipboard = () => {
-    // In a real app, this would use Clipboard.setStringAsync(ddidResponse)
-    Alert.alert('Copied', 'DDID response copied to clipboard');
+  const copyToClipboard = async () => {
+    if (!ddidResponse) return;
+    
+    try {
+      await Clipboard.setStringAsync(ddidResponse);
+      Alert.alert('Success', 'DDID response copied to clipboard');
+    } catch (error) {
+      console.error('Error copying to clipboard:', error);
+      Alert.alert('Error', 'Failed to copy to clipboard');
+    }
+    
     setModalVisible(false);
   };
 
@@ -225,6 +290,7 @@ The inspector recommends having a licensed plumber evaluate the source of the le
               ]
             );
           }}
+          disabled={isLoading || isSaving}
         >
           {image ? (
             <Image source={{ uri: image }} style={styles.uploadedImage} />
@@ -254,6 +320,7 @@ The inspector recommends having a licensed plumber evaluate the source of the le
             value={description}
             onChangeText={setDescription}
             multiline
+            editable={!isLoading && !isSaving}
           />
           <TouchableOpacity
             style={[
@@ -261,6 +328,7 @@ The inspector recommends having a licensed plumber evaluate the source of the le
               isRecording && { backgroundColor: Colors[colorScheme as 'light' | 'dark'].error }
             ]}
             onPress={isRecording ? stopVoiceToText : startVoiceToText}
+            disabled={isLoading || isSaving}
           >
             <Ionicons 
               name={isRecording ? "mic" : "mic-outline"} 
@@ -270,6 +338,13 @@ The inspector recommends having a licensed plumber evaluate the source of the le
           </TouchableOpacity>
         </View>
 
+        {/* Error Message (if any) */}
+        {apiError && (
+          <Text style={[styles.errorText, { color: Colors[colorScheme as 'light' | 'dark'].error }]}>
+            {apiError}
+          </Text>
+        )}
+
         {/* Generate Button */}
         <TouchableOpacity
           style={[
@@ -278,7 +353,7 @@ The inspector recommends having a licensed plumber evaluate the source of the le
             { backgroundColor: isGenerateDisabled ? '#cccccc' : Colors[colorScheme as 'light' | 'dark'].accent }
           ]}
           onPress={handleGenerateDDID}
-          disabled={isGenerateDisabled || isLoading}
+          disabled={isGenerateDisabled || isLoading || isSaving}
         >
           {isLoading ? (
             <ActivityIndicator color={Colors[colorScheme as 'light' | 'dark'].secondary} />
@@ -294,6 +369,7 @@ The inspector recommends having a licensed plumber evaluate the source of the le
             { borderColor: Colors[colorScheme as 'light' | 'dark'].accent }
           ]}
           onPress={handleNewInspection}
+          disabled={isLoading || isSaving}
         >
           <Text style={[styles.newInspectionButtonText, { color: Colors[colorScheme as 'light' | 'dark'].accent }]}>
             New Inspection
@@ -323,6 +399,14 @@ The inspector recommends having a licensed plumber evaluate the source of the le
               <Text style={[styles.ddidText, { color: Colors[colorScheme as 'light' | 'dark'].text }]}>
                 {ddidResponse}
               </Text>
+              {isSaving && (
+                <View style={styles.savingContainer}>
+                  <ActivityIndicator color={Colors[colorScheme as 'light' | 'dark'].accent} size="small" />
+                  <Text style={[styles.savingText, { color: Colors[colorScheme as 'light' | 'dark'].tabIconDefault }]}>
+                    Saving inspection...
+                  </Text>
+                </View>
+              )}
             </ScrollView>
           </View>
         </View>
@@ -392,6 +476,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  errorText: {
+    marginBottom: 15,
+    textAlign: 'center',
+  },
   generateButton: {
     width: '100%',
     height: 50,
@@ -457,5 +545,16 @@ const styles = StyleSheet.create({
   ddidText: {
     fontSize: 16,
     lineHeight: 24,
+  },
+  savingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 20,
+    padding: 10,
+  },
+  savingText: {
+    marginLeft: 10,
+    fontSize: 14,
   },
 }); 

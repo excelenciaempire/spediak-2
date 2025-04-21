@@ -1,20 +1,34 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Image, Alert, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, Image, Alert, ScrollView, ActivityIndicator } from 'react-native';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { Colors } from '@/constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, Link } from 'expo-router';
+import { useAuth } from '@/context/AuthContext';
 
 export default function LoginScreen() {
   const colorScheme = useColorScheme() || 'light';
   const router = useRouter();
+  const { login, error, isLoading, clearError } = useAuth();
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [passwordVisible, setPasswordVisible] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = () => {
+  // Clear any auth errors when component mounts or unmounts
+  useEffect(() => {
+    clearError();
+    return () => clearError();
+  }, [clearError]);
+
+  // Show error alert if there's an authentication error
+  useEffect(() => {
+    if (error) {
+      Alert.alert('Authentication Error', error);
+    }
+  }, [error]);
+
+  const handleLogin = async () => {
     // Validate inputs
     if (!email || !password) {
       Alert.alert('Error', 'Please enter both email and password');
@@ -28,25 +42,12 @@ export default function LoginScreen() {
       return;
     }
 
-    setIsLoading(true);
-
-    // In a real app, this would make an API call to authenticate
-    setTimeout(() => {
-      setIsLoading(false);
-      
-      // Navigate to the main app after successful login
-      router.replace('/(app)');
-    }, 1500);
+    // Use the login function from AuthContext
+    await login(email, password);
   };
 
   const handleSocialLogin = (provider: string) => {
     Alert.alert('Social Login', `${provider} login will be implemented in production`);
-    
-    // In a real app, this would handle OAuth login
-    // For demo, we'll simulate login success
-    setTimeout(() => {
-      router.replace('/(app)');
-    }, 1000);
   };
 
   return (
@@ -87,6 +88,7 @@ export default function LoginScreen() {
             onChangeText={setEmail}
             keyboardType="email-address"
             autoCapitalize="none"
+            editable={!isLoading}
           />
         </View>
 
@@ -112,10 +114,12 @@ export default function LoginScreen() {
             value={password}
             onChangeText={setPassword}
             secureTextEntry={!passwordVisible}
+            editable={!isLoading}
           />
           <TouchableOpacity
             style={styles.passwordVisibilityToggle}
             onPress={() => setPasswordVisible(!passwordVisible)}
+            disabled={isLoading}
           >
             <Ionicons
               name={passwordVisible ? 'eye-off-outline' : 'eye-outline'}
@@ -127,7 +131,7 @@ export default function LoginScreen() {
 
         {/* Forgot Password Link */}
         <Link href="/(auth)/forgot-password" asChild>
-          <TouchableOpacity style={styles.forgotPasswordContainer}>
+          <TouchableOpacity style={styles.forgotPasswordContainer} disabled={isLoading}>
             <Text style={[styles.forgotPasswordText, { color: Colors[colorScheme as 'light' | 'dark'].accent }]}>
               Forgot Password?
             </Text>
@@ -144,9 +148,11 @@ export default function LoginScreen() {
           onPress={handleLogin}
           disabled={isLoading}
         >
-          <Text style={styles.loginButtonText}>
-            {isLoading ? 'Signing In...' : 'Sign In'}
-          </Text>
+          {isLoading ? (
+            <ActivityIndicator color="#FFFFFF" size="small" />
+          ) : (
+            <Text style={styles.loginButtonText}>Sign In</Text>
+          )}
         </TouchableOpacity>
 
         {/* Divider */}
@@ -166,6 +172,7 @@ export default function LoginScreen() {
               { backgroundColor: Colors[colorScheme as 'light' | 'dark'].secondary }
             ]}
             onPress={() => handleSocialLogin('Google')}
+            disabled={isLoading}
           >
             <Image
               source={{ uri: 'https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg' }}
@@ -182,6 +189,7 @@ export default function LoginScreen() {
               { backgroundColor: Colors[colorScheme as 'light' | 'dark'].secondary }
             ]}
             onPress={() => handleSocialLogin('Facebook')}
+            disabled={isLoading}
           >
             <Image
               source={{ uri: 'https://upload.wikimedia.org/wikipedia/commons/5/51/Facebook_f_logo_%282019%29.svg' }}
@@ -199,9 +207,9 @@ export default function LoginScreen() {
             Don't have an account?
           </Text>
           <Link href="/(auth)/signup" asChild>
-            <TouchableOpacity>
+            <TouchableOpacity disabled={isLoading}>
               <Text style={[styles.signupLink, { color: Colors[colorScheme as 'light' | 'dark'].accent }]}>
-                {' Sign Up'}
+                Sign Up
               </Text>
             </TouchableOpacity>
           </Link>

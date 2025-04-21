@@ -1,46 +1,65 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Modal, ScrollView } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Modal, ScrollView, ActivityIndicator, RefreshControl } from 'react-native';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { Colors } from '@/constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
-
-// Mock data for inspection history
-const MOCK_INSPECTIONS = [
-  {
-    id: '1',
-    imageUrl: 'https://images.unsplash.com/photo-1558036117-15d82a90b9b1?ixlib=rb-1.2.1&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=500&h=400&q=80',
-    description: 'Water damage on ceiling below the upstairs bathroom',
-    ddidResponse: 'DDID Statement: The inspector observed water damage on the ceiling below the upstairs bathroom. This is a defect because it indicates a water leak from the plumbing or the shower/tub enclosure above. The moisture can lead to structural damage, mold growth, and deterioration of building materials if not addressed.\n\nThe inspector recommends having a licensed plumber evaluate the source of the leak and make necessary repairs. Additionally, once the leak is fixed, the affected ceiling material should be replaced or repaired by a qualified contractor.',
-    createdAt: '2023-07-15T14:30:00Z',
-  },
-  {
-    id: '2',
-    imageUrl: 'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?ixlib=rb-1.2.1&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=500&h=400&q=80',
-    description: 'Cracked foundation on southeast corner of the house',
-    ddidResponse: 'DDID Statement: The inspector observed a significant crack in the foundation on the southeast corner of the house. This is a defect because foundation cracks can compromise the structural integrity of the home, lead to water intrusion, and potentially indicate ongoing foundation settlement issues.\n\nThe inspector recommends hiring a licensed structural engineer to evaluate the severity of the crack and determine the cause. Based on the findings, appropriate repairs may include epoxy injection, foundation reinforcement, or addressing drainage issues around the perimeter of the home.',
-    createdAt: '2023-07-10T09:15:00Z',
-  },
-  {
-    id: '3',
-    imageUrl: 'https://images.unsplash.com/photo-1605276374104-dee2a0ed3cd6?ixlib=rb-1.2.1&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=500&h=400&q=80',
-    description: 'Outdated electrical panel with fuse system',
-    ddidResponse: 'DDID Statement: The inspector observed an outdated electrical panel using a fuse system rather than modern circuit breakers. This is a defect because fuse panels are generally considered obsolete by current standards, may not provide adequate capacity for modern electrical demands, and can represent increased fire risks due to potential for improper fuse replacements.\n\nThe inspector recommends consulting with a licensed electrician to evaluate the panel and advise on replacement with a modern circuit breaker panel that meets current electrical code requirements and the electrical demands of the home.',
-    createdAt: '2023-06-28T11:45:00Z',
-  },
-];
-
-interface Inspection {
-  id: string;
-  imageUrl: string;
-  description: string;
-  ddidResponse: string;
-  createdAt: string;
-}
+import * as Clipboard from 'expo-clipboard';
+import { useAuth } from '@/context/AuthContext';
+import { inspectionApi, Inspection } from '@/services/api';
+import { useNavigation } from '@react-navigation/native';
+import DrawerButton from '@/components/DrawerButton';
 
 export default function InspectionHistoryScreen() {
   const colorScheme = useColorScheme() || 'light';
+  const { user, token } = useAuth();
+  const navigation = useNavigation();
+  
+  // Set up the drawer menu button in the header
+  React.useLayoutEffect(() => {
+    navigation.setOptions({
+      headerLeft: () => <DrawerButton />,
+    });
+  }, [navigation]);
+  
+  const [inspections, setInspections] = useState<Inspection[]>([]);
   const [selectedInspection, setSelectedInspection] = useState<Inspection | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Function to fetch inspections
+  const fetchInspections = useCallback(async () => {
+    if (!user || !token) return;
+    
+    try {
+      setError(null);
+      const response = await inspectionApi.getInspections(user.id, token);
+      
+      if (!response.success || !response.data) {
+        throw new Error(response.message || 'Failed to fetch inspections');
+      }
+      
+      setInspections(response.data.inspections || []);
+    } catch (error: any) {
+      console.error('Error fetching inspections:', error);
+      setError(error.message || 'Failed to load inspection history. Please try again.');
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  }, [user, token]);
+
+  // Fetch inspections when the component mounts
+  useEffect(() => {
+    fetchInspections();
+  }, [fetchInspections]);
+
+  // Handle pull-to-refresh
+  const handleRefresh = useCallback(() => {
+    setIsRefreshing(true);
+    fetchInspections();
+  }, [fetchInspections]);
 
   const formatDate = (dateString: string) => {
     const options: Intl.DateTimeFormatOptions = {
@@ -63,9 +82,16 @@ export default function InspectionHistoryScreen() {
     setModalVisible(true);
   };
 
-  const copyToClipboard = () => {
-    // In a real app, this would use Clipboard.setStringAsync(selectedInspection.ddidResponse)
-    alert('DDID response copied to clipboard');
+  const copyToClipboard = async () => {
+    if (!selectedInspection) return;
+    
+    try {
+      await Clipboard.setStringAsync(selectedInspection.ddidResponse);
+      alert('DDID response copied to clipboard');
+    } catch (error) {
+      console.error('Error copying to clipboard:', error);
+      alert('Failed to copy to clipboard');
+    }
   };
 
   const renderInspectionItem = ({ item }: { item: Inspection }) => (
@@ -97,9 +123,35 @@ export default function InspectionHistoryScreen() {
     </TouchableOpacity>
   );
 
+  // Show loading indicator while fetching data
+  if (isLoading) {
+    return (
+      <View style={[styles.loadingContainer, { backgroundColor: Colors[colorScheme as 'light' | 'dark'].background }]}>
+        <ActivityIndicator size="large" color={Colors[colorScheme as 'light' | 'dark'].accent} />
+        <Text style={[styles.loadingText, { color: Colors[colorScheme as 'light' | 'dark'].text }]}>
+          Loading inspections...
+        </Text>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.container, { backgroundColor: Colors[colorScheme as 'light' | 'dark'].background }]}>
-      {MOCK_INSPECTIONS.length === 0 ? (
+      {error && (
+        <View style={styles.errorContainer}>
+          <Text style={[styles.errorText, { color: Colors[colorScheme as 'light' | 'dark'].error }]}>
+            {error}
+          </Text>
+          <TouchableOpacity 
+            style={[styles.retryButton, { backgroundColor: Colors[colorScheme as 'light' | 'dark'].accent }]}
+            onPress={fetchInspections}
+          >
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {!error && inspections.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Ionicons
             name="document-text-outline"
@@ -115,11 +167,19 @@ export default function InspectionHistoryScreen() {
         </View>
       ) : (
         <FlatList
-          data={MOCK_INSPECTIONS}
+          data={inspections}
           renderItem={renderInspectionItem}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              colors={[Colors[colorScheme as 'light' | 'dark'].accent]}
+              tintColor={Colors[colorScheme as 'light' | 'dark'].accent}
+            />
+          }
         />
       )}
 
@@ -188,6 +248,36 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 15,
+    fontSize: 16,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    textAlign: 'center',
+    marginBottom: 20,
+    fontSize: 16,
+  },
+  retryButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    marginTop: 10,
+  },
+  retryButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+  },
   listContainer: {
     padding: 16,
   },
@@ -200,50 +290,49 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 18,
     fontWeight: 'bold',
-    marginTop: 12,
+    marginTop: 20,
   },
   emptySubtext: {
     fontSize: 14,
     textAlign: 'center',
-    marginTop: 8,
+    marginTop: 10,
   },
   inspectionItem: {
     flexDirection: 'row',
     borderRadius: 12,
-    marginBottom: 12,
-    padding: 12,
+    overflow: 'hidden',
+    marginBottom: 16,
+    elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.2,
     shadowRadius: 2,
-    elevation: 2,
   },
   thumbnailImage: {
-    width: 70,
-    height: 70,
-    borderRadius: 8,
+    width: 100,
+    height: 100,
   },
   inspectionInfo: {
     flex: 1,
-    marginLeft: 12,
+    padding: 12,
     justifyContent: 'space-between',
   },
   descriptionText: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
-    marginBottom: 4,
+    marginBottom: 6,
   },
   ddidSnippet: {
-    fontSize: 12,
-    marginBottom: 4,
-    lineHeight: 16,
+    fontSize: 14,
+    lineHeight: 18,
+    marginBottom: 8,
   },
   dateText: {
-    fontSize: 11,
+    fontSize: 12,
   },
   chevronIcon: {
     alignSelf: 'center',
-    marginLeft: 8,
+    marginRight: 10,
   },
   modalOverlay: {
     flex: 1,
@@ -268,7 +357,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 16,
-    paddingBottom: 12,
+    paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#eeeeee',
   },
@@ -277,12 +366,12 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   modalBody: {
-    maxHeight: '90%',
+    flex: 1,
   },
   modalImage: {
     width: '100%',
     height: 200,
-    borderRadius: 12,
+    borderRadius: 8,
     marginBottom: 16,
   },
   modalInfoSection: {
@@ -290,11 +379,11 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 4,
+    fontWeight: 'bold',
+    marginBottom: 8,
   },
   sectionContent: {
     fontSize: 14,
-    lineHeight: 20,
+    lineHeight: 22,
   },
 }); 

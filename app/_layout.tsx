@@ -12,6 +12,7 @@ import { Stack } from 'expo-router';
 import { AuthProvider } from '@/context/AuthContext';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { View, Text, ActivityIndicator } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -35,30 +36,32 @@ export default function RootLayout() {
   }
 
   return (
-    <AuthProvider>
-      <SafeAreaProvider>
-        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen 
-              name="(auth)" 
-              options={{
-                // Auth screens don't need a gesture to dismiss
-                gestureEnabled: false,
-              }}
-            />
-            <Stack.Screen 
-              name="(app)" 
-              options={{
-                // Don't allow the user to swipe back to auth screens
-                gestureEnabled: false,
-              }}
-            />
-            <Stack.Screen name="+not-found" />
-          </Stack>
-          <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
-        </ThemeProvider>
-      </SafeAreaProvider>
-    </AuthProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <AuthProvider>
+        <SafeAreaProvider>
+          <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen 
+                name="(auth)" 
+                options={{
+                  // Auth screens don't need a gesture to dismiss
+                  gestureEnabled: false,
+                }}
+              />
+              <Stack.Screen 
+                name="(app)" 
+                options={{
+                  // Don't allow the user to swipe back to auth screens
+                  gestureEnabled: false,
+                }}
+              />
+              <Stack.Screen name="+not-found" />
+            </Stack>
+            <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+          </ThemeProvider>
+        </SafeAreaProvider>
+      </AuthProvider>
+    </GestureHandlerRootView>
   );
 }
 
