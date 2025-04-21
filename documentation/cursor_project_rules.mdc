@@ -1,0 +1,120 @@
+---
+description: Apply these rules when creating the project
+globs:
+alwaysApply: true
+---
+## Project Overview
+
+* **Type:** Mobile-first Home Inspection App
+* **Description:** Spediak is a mobile-first application designed for home inspectors to quickly generate standardized DDID (Defect, Description, Implication, and Direction) statements. The app allows users to upload defect images, add a description, and uses AI-powered capabilities to generate the DDID statement. It focuses on a seamless user experience with a single Hamburger Menu for navigation, ensuring a touch-optimized, accessible, and secure environment.
+* **Primary Goal:** Enable home inspectors to generate standardized DDID statements rapidly and accurately, leveraging artificial intelligence, while ensuring secure user authentication and real-time inspection history management.
+
+## Project Structure
+
+### Framework-Specific Routing
+
+* **Directory Rules:**
+
+    * **React (Web) - React Router 6:** Use a `src/routes/` folder with route components defined using `createBrowserRouter` or `<Routes>` layouts.
+    * **React Native (Mobile) - Expo Managed:** Use a dedicated `navigation/` directory where screens are registered via React Navigation. Entry point can be managed in `App.js` with stack or tab navigators as needed.
+
+### Core Directories
+
+* **Versioned Structure:**
+
+    * **web:** Contains the React (Web) implementation including `src/` for views, components, and routing based on React Router 6.
+    * **mobile:** Contains the React Native implementation using Expo. The entry file is `App.js` and screens are organized in a `screens/` folder.
+    * **backend:** Contains the Node.js (v18+) and Express.js server files along with middleware implementations and API routes (e.g., `server/routes/`, `server/controllers/`).
+    * **assets:** Shared image and icon assets for both web and mobile platforms.
+
+### Key Files
+
+* **Stack-Versioned Patterns:**
+
+    * **Web:**
+        * `src/index.js` → Bootstraps the React application using React Router 6.
+        * `src/routes/Home.jsx` → Home screen displaying New Inspection and Inspection History.
+    * **Mobile:**
+        * `App.js` → Entry point using Expo with React Navigation configuration.
+        * `screens/NewInspection.js` → Screen for handling image uploads, description input, and DDID generation.
+    * **Backend:**
+        * `server/app.js` → Sets up Express, middleware, and routes.
+        * `server/routes/ddid.js` → Handles the DDID generation logic with state-specific rules.
+
+## Tech Stack Rules
+
+* **Version Enforcement:**
+
+    * **React@18:** Follow modern hooks-based functional components and enforce best practices with React Router 6 for web routing.
+    * **React Native with Expo:** Use the Expo managed workflow and React Navigation for screen management. Ensure compatibility across iOS and Android.
+    * **Node.js@18+:** Use asynchronous patterns (async/await) and robust error handling within Express.
+    * **Express:** Utilize middleware for authentication, error handling, and security.
+
+## PRD Compliance
+
+* **Non-Negotiable:**
+
+    * "The selected state (North Carolina or South Carolina) must influence the DDID generation logic on the backend." This requirement is enforced within the API calls used for DDID generation and adapted for state-specific codes/standards.
+
+## App Flow Integration
+
+* **Stack-Aligned Flow:**
+
+    * **React (Web):** The Hamburger Menu in the `src/components/` directs users to:
+        * New Inspection (`src/routes/NewInspection.jsx`)
+        * Inspection History
+        * Profile Settings
+        * Logout
+    * **React Native (Mobile):** The Hamburger Menu in the Expo app navigates using React Navigation to stack screens:
+        * New Inspection (Main Screen with image upload, description input, and DDID generation)
+        * Inspection History (Real-time list of inspections)
+        * Profile Settings (Editable fields with state selection affecting DDID logic)
+
+## Best Practices
+
+* **React (Web):**
+    * Use functional components and React hooks for state and lifecycle management.
+    * Optimize component rendering using memoization where applicable.
+    * Structure components for reusability and maintain clear separation of concerns.
+
+* **React Native (Mobile with Expo):**
+    * Follow the Expo managed workflow best practices for asset management and deployment.
+    * Utilize React Navigation for smooth and consistent screen transitions.
+    * Optimize performance by reducing over-rendering and using lazy loading where possible.
+
+* **Node.js:**
+    * Employ async/await for asynchronous operations and ensure robust error handling.
+    * Separate concerns by organizing code into controllers, routes, and middleware.
+    * Secure the API by extracting sensitive keys into environment variables.
+
+* **Express:**
+    * Use middlewares for logging, error handling, and security enhancements such as rate limiting.
+    * Validate all incoming API requests to prevent injection and other common vulnerabilities.
+    * Ensure that session management (JWT) and password storage (salted hashing) adhere to security best practices.
+
+## Rules
+
+* Derive folder/file patterns directly from the tech stack versions and conventions.
+* If a project uses React Router 6 for web routing, enforce a `src/routes/` directory with clearly defined route components.
+* For React Native (Expo), ensure the use of a dedicated `navigation/` directory and do not mix mobile routing logic with web routing conventions.
+* Mirror this logic for any additional frameworks incorporated in the project.
+* Never mix version-specific patterns; for example, keep the React Native (mobile) routing separated from React (web) routing.
+
+## Rules Metrics
+
+Before starting the project development, create a metrics file in the root of the project called `cursor_metrics.md`.
+
+### Instructions:
+
+* Each time a cursor rule is used as context, update `cursor_metrics.md`.
+* Use the following format for `cursor_metrics.md:`
+
+# Rules Metrics
+
+## Usage
+
+The number of times the rules are used as context:
+
+* rule-name.mdc: 5
+* another-rule.mdc: 2
+* ...other rules
