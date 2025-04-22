@@ -3,18 +3,31 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, Image, Alert, Scro
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { Colors } from '@/constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, Link } from 'expo-router';
+import { Link } from 'expo-router';
+import { useAuth } from '@/context/AuthContext';
 
 export default function LoginScreen() {
   const colorScheme = useColorScheme() || 'light';
-  const router = useRouter();
+  const { login, isLoading, error, clearError } = useAuth();
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [passwordVisible, setPasswordVisible] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = () => {
+  // Clear any previous errors when component mounts or unmounts
+  React.useEffect(() => {
+    clearError();
+    return () => clearError();
+  }, []);
+
+  // Show error alert if authentication fails
+  React.useEffect(() => {
+    if (error) {
+      Alert.alert('Login Error', error);
+    }
+  }, [error]);
+
+  const handleLogin = async () => {
     // Validate inputs
     if (!email || !password) {
       Alert.alert('Error', 'Please enter both email and password');
@@ -28,37 +41,20 @@ export default function LoginScreen() {
       return;
     }
 
-    setIsLoading(true);
-
-    // In a real app, this would make an API call to authenticate
-    setTimeout(() => {
-      setIsLoading(false);
-      
-      // Navigate to the main app after successful login
-      router.replace('/(app)');
-    }, 1500);
-  };
-
-  const handleSocialLogin = (provider: string) => {
-    Alert.alert('Social Login', `${provider} login will be implemented in production`);
-    
-    // In a real app, this would handle OAuth login
-    // For demo, we'll simulate login success
-    setTimeout(() => {
-      router.replace('/(app)');
-    }, 1000);
+    // Call the login function from AuthContext
+    await login(email, password);
   };
 
   return (
     <ScrollView
       contentContainerStyle={styles.scrollContainer}
-      style={[styles.container, { backgroundColor: Colors[colorScheme as 'light' | 'dark'].background }]}
+      style={[styles.container, { backgroundColor: Colors.light.background }]}
     >
       <View style={styles.logoContainer}>
-        <Text style={[styles.logoText, { color: Colors[colorScheme as 'light' | 'dark'].tint }]}>
+        <Text style={[styles.logoText, { color: Colors.light.tint }]}>
           Spediak
         </Text>
-        <Text style={[styles.tagline, { color: Colors[colorScheme as 'light' | 'dark'].text }]}>
+        <Text style={[styles.tagline, { color: Colors.light.text }]}>
           Professional DDID Statements
         </Text>
       </View>
@@ -69,20 +65,20 @@ export default function LoginScreen() {
           <Ionicons 
             name="mail-outline" 
             size={22} 
-            color={Colors[colorScheme as 'light' | 'dark'].tabIconDefault} 
+            color={Colors.light.tabIconDefault} 
             style={styles.inputIcon}
           />
           <TextInput
             style={[
               styles.input,
               { 
-                color: Colors[colorScheme as 'light' | 'dark'].text,
-                backgroundColor: Colors[colorScheme as 'light' | 'dark'].secondary,
+                color: Colors.light.text,
+                backgroundColor: Colors.light.secondary,
                 borderColor: '#eeeeee',
               }
             ]}
             placeholder="Email Address"
-            placeholderTextColor={Colors[colorScheme as 'light' | 'dark'].tabIconDefault}
+            placeholderTextColor={Colors.light.tabIconDefault}
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
@@ -95,20 +91,20 @@ export default function LoginScreen() {
           <Ionicons 
             name="lock-closed-outline" 
             size={22} 
-            color={Colors[colorScheme as 'light' | 'dark'].tabIconDefault} 
+            color={Colors.light.tabIconDefault} 
             style={styles.inputIcon}
           />
           <TextInput
             style={[
               styles.input,
               { 
-                color: Colors[colorScheme as 'light' | 'dark'].text,
-                backgroundColor: Colors[colorScheme as 'light' | 'dark'].secondary,
+                color: Colors.light.text,
+                backgroundColor: Colors.light.secondary,
                 borderColor: '#eeeeee',
               }
             ]}
             placeholder="Password"
-            placeholderTextColor={Colors[colorScheme as 'light' | 'dark'].tabIconDefault}
+            placeholderTextColor={Colors.light.tabIconDefault}
             value={password}
             onChangeText={setPassword}
             secureTextEntry={!passwordVisible}
@@ -120,7 +116,7 @@ export default function LoginScreen() {
             <Ionicons
               name={passwordVisible ? 'eye-off-outline' : 'eye-outline'}
               size={22}
-              color={Colors[colorScheme as 'light' | 'dark'].tabIconDefault}
+              color={Colors.light.tabIconDefault}
             />
           </TouchableOpacity>
         </View>
@@ -128,7 +124,7 @@ export default function LoginScreen() {
         {/* Forgot Password Link */}
         <Link href="/(auth)/forgot-password" asChild>
           <TouchableOpacity style={styles.forgotPasswordContainer}>
-            <Text style={[styles.forgotPasswordText, { color: Colors[colorScheme as 'light' | 'dark'].accent }]}>
+            <Text style={[styles.forgotPasswordText, { color: Colors.light.accent }]}>
               Forgot Password?
             </Text>
           </TouchableOpacity>
@@ -138,7 +134,7 @@ export default function LoginScreen() {
         <TouchableOpacity
           style={[
             styles.loginButton,
-            { backgroundColor: Colors[colorScheme as 'light' | 'dark'].accent },
+            { backgroundColor: Colors.light.accent },
             isLoading && styles.loginButtonDisabled
           ]}
           onPress={handleLogin}
@@ -149,58 +145,14 @@ export default function LoginScreen() {
           </Text>
         </TouchableOpacity>
 
-        {/* Divider */}
-        <View style={styles.dividerContainer}>
-          <View style={[styles.divider, { backgroundColor: Colors[colorScheme as 'light' | 'dark'].tabIconDefault }]} />
-          <Text style={[styles.dividerText, { color: Colors[colorScheme as 'light' | 'dark'].tabIconDefault }]}>
-            or sign in with
-          </Text>
-          <View style={[styles.divider, { backgroundColor: Colors[colorScheme as 'light' | 'dark'].tabIconDefault }]} />
-        </View>
-
-        {/* Social Login Buttons */}
-        <View style={styles.socialButtonsContainer}>
-          <TouchableOpacity
-            style={[
-              styles.socialButton,
-              { backgroundColor: Colors[colorScheme as 'light' | 'dark'].secondary }
-            ]}
-            onPress={() => handleSocialLogin('Google')}
-          >
-            <Image
-              source={{ uri: 'https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg' }}
-              style={styles.socialIcon}
-            />
-            <Text style={[styles.socialButtonText, { color: Colors[colorScheme as 'light' | 'dark'].text }]}>
-              Google
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.socialButton,
-              { backgroundColor: Colors[colorScheme as 'light' | 'dark'].secondary }
-            ]}
-            onPress={() => handleSocialLogin('Facebook')}
-          >
-            <Image
-              source={{ uri: 'https://upload.wikimedia.org/wikipedia/commons/5/51/Facebook_f_logo_%282019%29.svg' }}
-              style={styles.socialIcon}
-            />
-            <Text style={[styles.socialButtonText, { color: Colors[colorScheme as 'light' | 'dark'].text }]}>
-              Facebook
-            </Text>
-          </TouchableOpacity>
-        </View>
-
         {/* Sign Up Link */}
         <View style={styles.signupContainer}>
-          <Text style={[styles.signupText, { color: Colors[colorScheme as 'light' | 'dark'].text }]}>
+          <Text style={[styles.signupText, { color: Colors.light.text }]}>
             Don't have an account?
           </Text>
           <Link href="/(auth)/signup" asChild>
             <TouchableOpacity>
-              <Text style={[styles.signupLink, { color: Colors[colorScheme as 'light' | 'dark'].accent }]}>
+              <Text style={[styles.signupLink, { color: Colors.light.accent }]}>
                 {' Sign Up'}
               </Text>
             </TouchableOpacity>
@@ -280,43 +232,6 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
-  },
-  dividerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 30,
-  },
-  divider: {
-    flex: 1,
-    height: 1,
-  },
-  dividerText: {
-    marginHorizontal: 10,
-    fontSize: 14,
-  },
-  socialButtonsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 30,
-  },
-  socialButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '48%',
-    height: 50,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#eeeeee',
-  },
-  socialIcon: {
-    width: 24,
-    height: 24,
-    marginRight: 8,
-  },
-  socialButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
   },
   signupContainer: {
     flexDirection: 'row',

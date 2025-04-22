@@ -1,11 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcrypt');
-
-// Reference to the mock users array (would be replaced with Supabase in production)
-// Note: This is a reference to the same array in auth.js, but in a real app
-// we would import from a database module instead
-const users = [];
+const supabase = require('../config/supabase');
+const logger = require('../config/logger');
+const { profileUpdateValidation, passwordUpdateValidation } = require('../middleware/validation');
 
 /**
  * @route   GET /api/v1/user/profile
@@ -14,27 +12,34 @@ const users = [];
  */
 router.get('/profile', async (req, res, next) => {
   try {
-    const userId = req.query.userId; // In production, would get from JWT
+    const userId = req.user.id; // Get the user ID from the token
     
-    if (!userId) {
-      return res.status(400).json({
-        success: false,
-        message: 'User ID is required'
-      });
-    }
+    logger.info(`Fetching profile for user: ${userId}`);
     
-    // Find user by ID
-    const user = users.find(u => u.id === userId);
+    // Get user from Supabase
+    const { data: userData, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', userId)
+      .single();
     
-    if (!user) {
+    if (error) {
+      logger.error(`Error fetching user: ${error.message}`);
       return res.status(404).json({
         success: false,
         message: 'User not found'
       });
     }
     
-    // Remove sensitive information
-    const { password, ...userProfile } = user;
+    // Format response data
+    const userProfile = {
+      id: userData.id,
+      email: userData.email,
+      fullName: userData.full_name,
+      state: userData.state,
+      profileImageUrl: userData.profile_image_url,
+      createdAt: userData.created_at
+    };
     
     res.status(200).json({
       success: true,
@@ -43,6 +48,7 @@ router.get('/profile', async (req, res, next) => {
       }
     });
   } catch (error) {
+    logger.error(`Profile fetch error: ${error.message}`);
     next(error);
   }
 });
@@ -52,44 +58,54 @@ router.get('/profile', async (req, res, next) => {
  * @desc    Update user profile information
  * @access  Private
  */
-router.put('/profile', async (req, res, next) => {
+router.put('/profile', profileUpdateValidation, async (req, res, next) => {
   try {
-    const userId = req.query.userId; // In production, would get from JWT
+    const userId = req.user.id; // Get the user ID from the token
     const { fullName, state, profileImageUrl } = req.body;
     
-    if (!userId) {
-      return res.status(400).json({
-        success: false,
-        message: 'User ID is required'
-      });
-    }
+    logger.info(`Updating profile for user: ${userId}`);
     
-    // Find user by ID
-    const userIndex = users.findIndex(u => u.id === userId);
+    // Prepare update data (converting camelCase to snake_case for database)
+    const updateData = {};
+    if (fullName) updateData.full_name = fullName;
+    if (state) updateData.state = state;
+    if (profileImageUrl !== undefined) updateData.profile_image_url = profileImageUrl;
     
-    if (userIndex === -1) {
+    // Update user in Supabase
+    const { data: updatedUser, error } = await supabase
+      .from('users')
+      .update(updateData)
+      .eq('id', userId)
+      .select()
+      .single();
+    
+    if (error) {
+      logger.error(`Profile update error: ${error.message}`);
       return res.status(404).json({
         success: false,
-        message: 'User not found'
+        message: 'User not found or update failed'
       });
     }
     
-    // Update user fields
-    if (fullName) users[userIndex].fullName = fullName;
-    if (state) users[userIndex].state = state;
-    if (profileImageUrl) users[userIndex].profileImageUrl = profileImageUrl;
-    
-    // Remove sensitive information
-    const { password, ...updatedUser } = users[userIndex];
+    // Format response data
+    const userProfile = {
+      id: updatedUser.id,
+      email: updatedUser.email,
+      fullName: updatedUser.full_name,
+      state: updatedUser.state,
+      profileImageUrl: updatedUser.profile_image_url,
+      createdAt: updatedUser.created_at
+    };
     
     res.status(200).json({
       success: true,
       message: 'Profile updated successfully',
       data: {
-        user: updatedUser
+        user: userProfile
       }
     });
   } catch (error) {
+    logger.error(`Profile update error: ${error.message}`);
     next(error);
   }
 });
@@ -99,56 +115,64 @@ router.put('/profile', async (req, res, next) => {
  * @desc    Update user password
  * @access  Private
  */
-router.put('/password', async (req, res, next) => {
+router.put('/password', passwordUpdateValidation, async (req, res, next) => {
   try {
-    const userId = req.query.userId; // In production, would get from JWT
+    const userId = req.user.id; // Get the user ID from the token
     const { currentPassword, newPassword } = req.body;
     
-    if (!userId) {
-      return res.status(400).json({
-        success: false,
-        message: 'User ID is required'
-      });
-    }
+    logger.info(`Password update attempt for user: ${userId}`);
     
-    if (!currentPassword || !newPassword) {
-      return res.status(400).json({
-        success: false,
-        message: 'Current password and new password are required'
-      });
-    }
+    // Using Supabase Auth API to update password
+    // First, get user's current email
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('email')
+      .eq('id', userId)
+      .single();
     
-    // Find user by ID
-    const userIndex = users.findIndex(u => u.id === userId);
-    
-    if (userIndex === -1) {
+    if (userError) {
+      logger.error(`Error fetching user email: ${userError.message}`);
       return res.status(404).json({
         success: false,
         message: 'User not found'
       });
     }
     
-    // Verify current password
-    const isMatch = await bcrypt.compare(currentPassword, users[userIndex].password);
-    if (!isMatch) {
+    // Verify current password by attempting sign-in
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: userData.email,
+      password: currentPassword
+    });
+    
+    if (signInError) {
+      logger.warn(`Invalid current password for user: ${userId}`);
       return res.status(401).json({
         success: false,
         message: 'Current password is incorrect'
       });
     }
     
-    // Hash new password
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(newPassword, salt);
-    
     // Update password
-    users[userIndex].password = hashedPassword;
+    const { error: updateError } = await supabase.auth.updateUser({
+      password: newPassword
+    });
+    
+    if (updateError) {
+      logger.error(`Password update error: ${updateError.message}`);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to update password'
+      });
+    }
+    
+    logger.info(`Password updated successfully for user: ${userId}`);
     
     res.status(200).json({
       success: true,
       message: 'Password updated successfully'
     });
   } catch (error) {
+    logger.error(`Password update error: ${error.message}`);
     next(error);
   }
 });

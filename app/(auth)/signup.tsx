@@ -3,11 +3,13 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert, ScrollView 
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { Colors } from '@/constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
+import { useAuth } from '@/context/AuthContext';
+import { useRouter } from 'expo-router';
 
 export default function SignupScreen() {
   const colorScheme = useColorScheme() || 'light';
+  const { signup, isLoading, error, clearError } = useAuth();
   const router = useRouter();
   
   const [fullName, setFullName] = useState('');
@@ -16,9 +18,21 @@ export default function SignupScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [state, setState] = useState('North Carolina');
   const [passwordVisible, setPasswordVisible] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  
+  // Clear any previous errors when component mounts or unmounts
+  React.useEffect(() => {
+    clearError();
+    return () => clearError();
+  }, []);
 
-  const handleSignup = () => {
+  // Show error alert if registration fails
+  React.useEffect(() => {
+    if (error) {
+      Alert.alert('Registration Error', error);
+    }
+  }, [error]);
+
+  const handleSignup = async () => {
     // Validate inputs
     if (!fullName || !email || !password || !confirmPassword) {
       Alert.alert('Error', 'Please fill in all fields');
@@ -44,15 +58,8 @@ export default function SignupScreen() {
       return;
     }
 
-    setIsLoading(true);
-
-    // In a real app, this would make an API call to register the user
-    setTimeout(() => {
-      setIsLoading(false);
-      
-      // Navigate to email verification screen
-      router.push('/(auth)/verify-email');
-    }, 1500);
+    // Call the signup function from AuthContext
+    await signup(email, password, fullName, state);
   };
 
   return (

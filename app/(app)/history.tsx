@@ -187,7 +187,7 @@ export default function InspectionHistoryScreen() {
       const filtered = inspections.filter(
         inspection => 
           inspection.description.toLowerCase().includes(lowercaseQuery) ||
-          inspection.ddidResponse.toLowerCase().includes(lowercaseQuery)
+          inspection.ddid_response.toLowerCase().includes(lowercaseQuery)
       );
       setFilteredInspections(filtered);
     }
@@ -214,8 +214,8 @@ export default function InspectionHistoryScreen() {
   
   const sortInspections = (inspectionsList: Inspection[], order: 'newest' | 'oldest') => {
     return [...inspectionsList].sort((a, b) => {
-      const dateA = new Date(a.createdAt).getTime();
-      const dateB = new Date(b.createdAt).getTime();
+      const dateA = new Date(a.created_at).getTime();
+      const dateB = new Date(b.created_at).getTime();
       return order === 'newest' ? dateB - dateA : dateA - dateB;
     });
   };
@@ -248,9 +248,9 @@ export default function InspectionHistoryScreen() {
   };
 
   const copyToClipboard = async () => {
-    if (selectedInspection?.ddidResponse) {
+    if (selectedInspection?.ddid_response) {
       try {
-        await Clipboard.setStringAsync(selectedInspection.ddidResponse);
+        await Clipboard.setStringAsync(selectedInspection.ddid_response);
         setCopiedToClipboard(true);
         setTimeout(() => setCopiedToClipboard(false), 2000);
       } catch (error) {
@@ -332,16 +332,16 @@ export default function InspectionHistoryScreen() {
           onPress={() => openInspectionDetails(item)}
           activeOpacity={0.7}
         >
-          <Image source={{ uri: item.imageUrl }} style={styles.thumbnailImage} />
+          <Image source={{ uri: item.image_url }} style={styles.thumbnailImage} />
           <View style={styles.inspectionInfo}>
             <Text style={[styles.descriptionText, { color: Colors.light.text }]}>
               {truncateText(item.description, 70)}
             </Text>
             <Text style={[styles.ddidSnippet, { color: Colors.light.text }]}>
-              {truncateText(item.ddidResponse, 100)}
+              {truncateText(item.ddid_response, 100)}
             </Text>
             <Text style={[styles.dateText, { color: Colors.light.tabIconDefault }]}>
-              {formatDate(item.createdAt)}
+              {formatDate(item.created_at)}
             </Text>
           </View>
           <Ionicons
@@ -514,7 +514,7 @@ export default function InspectionHistoryScreen() {
             {selectedInspection && (
               <ScrollView style={styles.modalBody}>
                 <Image
-                  source={{ uri: selectedInspection.imageUrl }}
+                  source={{ uri: selectedInspection.image_url }}
                   style={styles.modalImage}
                   resizeMode="cover"
                 />
@@ -531,7 +531,7 @@ export default function InspectionHistoryScreen() {
                     DDID Response
                   </Text>
                   <Text style={[styles.sectionContent, { color: Colors.light.text }]}>
-                    {selectedInspection.ddidResponse}
+                    {selectedInspection.ddid_response}
                   </Text>
                 </View>
                 <View style={styles.modalInfoSection}>
@@ -539,7 +539,7 @@ export default function InspectionHistoryScreen() {
                     Date Created
                   </Text>
                   <Text style={[styles.sectionContent, { color: Colors.light.text }]}>
-                    {formatDate(selectedInspection.createdAt)}
+                    {formatDate(selectedInspection.created_at)}
                   </Text>
                 </View>
               </ScrollView>
@@ -599,10 +599,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 12,
     padding: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.1)',
     elevation: 2,
   },
   thumbnailImage: {
@@ -644,10 +641,7 @@ const styles = StyleSheet.create({
     maxHeight: '90%',
     borderRadius: 16,
     padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    boxShadow: '0px 2px 3.84px rgba(0, 0, 0, 0.25)',
     elevation: 5,
   },
   modalHeader: {

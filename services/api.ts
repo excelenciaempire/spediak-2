@@ -1,467 +1,355 @@
 import Constants from 'expo-constants';
-import { storageService } from './storage';
-import NetInfo from '@react-native-community/netinfo';
+import { supabase } from './supabaseClient'; // Import the Supabase client
+import { AuthError, PostgrestError, Session, User as SupabaseAuthUser } from '@supabase/supabase-js';
 
-// Define API base URL
-// In development, this would point to your local server
-// In production, this would point to your deployed backend
+// Define API base URL (only needed for non-Supabase endpoints like generateDDID)
 const API_URL = Constants.expoConfig?.extra?.apiUrl || 'http://localhost:5000/api/v1';
 
-// Types for API requests and responses
+// Keep existing types, but they might need adjustment based on Supabase schema
+// Or use Supabase generated types in the future
 export interface User {
   id: string;
-  email: string;
-  fullName: string;
+  email?: string; // Email might be from auth user, not users table directly sometimes
+  full_name: string; // Supabase uses snake_case by default, ensure table matches or map
   state: string;
-  profileImageUrl: string | null;
-  createdAt: string;
+  profile_image_url: string | null;
+  created_at: string;
+  updated_at?: string; // Added optional updated_at
 }
 
 export interface Inspection {
   id: string;
-  userId: string;
-  imageUrl: string;
+  user_id: string; // Ensure this matches Supabase column name
+  image_url: string;
   description: string;
-  ddidResponse: string;
-  createdAt: string;
+  ddid_response: string;
+  created_at: string;
+  updated_at?: string; // Added optional updated_at
 }
 
-export interface AuthResponse {
-  success: boolean;
-  message: string;
-  data?: {
-    user: User;
-    token: string;
-  };
-}
-
-export interface ApiResponse<T> {
-  success: boolean;
-  message?: string;
-  data?: T;
-  count?: number;
-}
-
-// Helper function for handling API errors
-const handleApiError = (error: any): never => {
-  console.error('API Error:', error);
-  if (error.response && error.response.data) {
-    throw new Error(error.response.data.message || 'An error occurred');
-  }
-  throw new Error('Network error or server unavailable');
+// --- Helper for handling Supabase errors ---
+const handleSupabaseError = (error: AuthError | PostgrestError | null, context: string): never => {
+  console.error(`Supabase Error (${context}):`, error?.message);
+  throw new Error(error?.message || `An error occurred during ${context}.`);
 };
 
-// Helper function to set common headers including auth token
-const getHeaders = (token?: string) => {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-  
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-  
-  return headers;
-};
-
-// Check if device is online
-const isOnline = async (): Promise<boolean> => {
-  const netInfo = await NetInfo.fetch();
-  return netInfo.isConnected ?? false;
-};
-
-// Authentication API calls
+// --- Authentication API calls using Supabase ---
 export const authApi = {
   // Register a new user
-  async register(email: string, password: string, fullName: string, state: string): Promise<AuthResponse> {
-    try {
-      const online = await isOnline();
-      if (!online) {
-        throw new Error('No internet connection. Please try again when you\'re online.');
+  async register(email: string, password: string, fullName: string, state: string) {
+    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        // Store additional user metadata upon sign-up
+        // This data is stored in auth.users.raw_user_meta_data
+        // The handle_new_user trigger should ideally pull from here or be updated
+        data: {
+          full_name: fullName, // Ensure your handle_new_user trigger uses this
+          state: state,        // Ensure your handle_new_user trigger uses this
+        }
       }
-      
-      const response = await fetch(`${API_URL}/auth/signup`, {
-        method: 'POST',
-        headers: getHeaders(),
-        body: JSON.stringify({ email, password, fullName, state }),
-      });
-      
-      return await response.json();
-    } catch (error) {
-      return handleApiError(error);
+    });
+
+    if (signUpError) {
+      return handleSupabaseError(signUpError, 'registration');
     }
+    if (!signUpData.user) {
+        throw new Error('Registration successful, but no user data returned.');
+    }
+
+    // Note: The handle_new_user trigger you created should automatically
+    // insert into the public.users table. If it doesn't have access
+    // to full_name and state from options.data, you might need to:
+    // 1. Update the trigger to read from raw_user_meta_data OR
+    // 2. Make a separate call here to insert/update the public.users table
+    //    (less ideal as it's not atomic with signup).
+
+    // Example of updating public.users if trigger doesn't handle metadata:
+    // const { error: profileError } = await supabase
+    //   .from('users')
+    //   .update({ full_name: fullName, state: state })
+    //   .eq('id', signUpData.user.id);
+    // if (profileError) {
+    //    console.warn("User signed up, but failed to update profile details immediately.", profileError);
+    //    // Decide how to handle this - maybe retry later?
+    // }
+
+
+    // Return structure can be simplified or adapted as needed by your AuthContext
+    return {
+      success: true,
+      message: 'Registration successful. Please check your email for verification.',
+      data: {
+        user: signUpData.user, // Contains auth user info (id, email, etc.)
+        session: signUpData.session // Contains access token etc.
+      }
+    };
   },
-  
+
   // Login an existing user
-  async login(email: string, password: string): Promise<AuthResponse> {
-    try {
-      const online = await isOnline();
-      if (!online) {
-        throw new Error('No internet connection. Please try again when you\'re online.');
-      }
-      
-      const response = await fetch(`${API_URL}/auth/login`, {
-        method: 'POST',
-        headers: getHeaders(),
-        body: JSON.stringify({ email, password }),
-      });
-      
-      return await response.json();
-    } catch (error) {
-      return handleApiError(error);
+  async login(email: string, password: string) {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      return handleSupabaseError(error, 'login');
     }
+     if (!data.user || !data.session) {
+        throw new Error('Login successful, but no user or session data returned.');
+    }
+
+    // Optionally fetch the full user profile from public.users table here
+    // const profile = await userApi.getProfile(data.user.id);
+
+    return {
+       success: true,
+       message: 'Login successful.',
+       data: {
+         user: data.user,    // Auth user
+         session: data.session // Session details (token)
+         // profile: profile.data?.user // Include profile if fetched
+       }
+     };
   },
-  
-  // Verify email with token
-  async verifyEmail(token: string): Promise<ApiResponse<void>> {
-    try {
-      const online = await isOnline();
-      if (!online) {
-        throw new Error('No internet connection. Please try again when you\'re online.');
-      }
-      
-      const response = await fetch(`${API_URL}/auth/verify/${token}`, {
-        method: 'GET',
-        headers: getHeaders(),
-      });
-      
-      return await response.json();
-    } catch (error) {
-      return handleApiError(error);
+
+  // Log out user
+  async logout(): Promise<{ success: boolean, message?: string }> {
+    const { error } = await supabase.auth.signOut();
+
+    if (error) {
+      // Don't throw, just log and report failure
+       console.error('Supabase Error (logout):', error?.message);
+      return { success: false, message: error.message };
     }
-  },
-  
-  // Log out user and clear local data
-  async logout(userId: string): Promise<void> {
-    try {
-      // Clear all user data from local storage
-      await storageService.clearAllUserData(userId);
-    } catch (error) {
-      console.error('Error during logout:', error);
-      throw error;
-    }
+    // Note: Clearing local storage might still be desired depending on what else is stored
+    // Consider calling storageService.clearAllUserData(userId) if needed,
+    // but ensure userId is available before calling signOut.
+    return { success: true };
   },
 };
 
-// Inspection API calls
+// --- Inspection API calls using Supabase ---
 export const inspectionApi = {
-  // Generate DDID from image and description
+  // Generate DDID - Assuming this still calls your custom endpoint
   async generateDDID(
-    imageUrl: string, 
-    description: string, 
-    userId: string, 
-    token: string
-  ): Promise<ApiResponse<{ ddidResponse: string }>> {
+    imageUrl: string,
+    description: string,
+    userId: string // This might not be needed if auth is handled by the endpoint
+  ): Promise<{ success: boolean; message?: string; data?: { ddidResponse: string }}> {
+     console.warn("generateDDID is using the old fetch method. Ensure API_URL is correct and the endpoint handles auth if needed.");
     try {
-      const online = await isOnline();
-      if (!online) {
-        throw new Error('No internet connection. DDID generation requires internet connectivity.');
+      // Get the current session for the auth token
+      const session = (await supabase.auth.getSession()).data.session;
+      if (!session) {
+        throw new Error('User not authenticated. Cannot generate DDID.');
       }
-      
+
       const response = await fetch(`${API_URL}/inspections/generate-ddid`, {
         method: 'POST',
-        headers: getHeaders(token),
+        headers: {
+           'Content-Type': 'application/json',
+           // Pass the Supabase JWT token to your custom backend
+           'Authorization': `Bearer ${session.access_token}`
+        },
+        // Check if your backend endpoint still needs userId in the body
         body: JSON.stringify({ imageUrl, description, userId }),
       });
-      
+
+       if (!response.ok) {
+         const errorData = await response.json().catch(() => ({ message: 'Failed to parse error response' }));
+         throw new Error(errorData.message || `HTTP error ${response.status}`);
+       }
+
       return await response.json();
-    } catch (error) {
-      return handleApiError(error);
+    } catch (error: any) {
+       console.error('API Error (generateDDID):', error);
+       throw new Error(error.message || 'Failed to generate DDID response.');
     }
   },
-  
+
   // Save a new inspection
   async saveInspection(
     userId: string,
     imageUrl: string,
     description: string,
-    ddidResponse: string,
-    token: string
-  ): Promise<ApiResponse<{ inspection: Inspection }>> {
-    try {
-      const online = await isOnline();
-      
-      // Create inspection object
-      const newInspection: Inspection = {
-        id: Date.now().toString(), // Temporary ID until we get a real one from the server
-        userId,
-        imageUrl,
-        description,
-        ddidResponse,
-        createdAt: new Date().toISOString(),
-      };
-      
-      // If offline, save to local storage and queue for later sync
-      if (!online) {
-        // Save to local storage
-        await storageService.addInspection(userId, newInspection);
-        
-        // Add to offline queue for later sync
-        await storageService.addToOfflineQueue(userId, {
-          type: 'create',
-          data: {
-            imageUrl,
-            description,
-            ddidResponse,
-          },
-        });
-        
-        // Return local response
-        return {
-          success: true,
-          message: 'Inspection saved locally. It will be synced when online.',
-          data: {
-            inspection: newInspection,
-          },
-        };
-      }
-      
-      // If online, send to server
-      const response = await fetch(`${API_URL}/inspections`, {
-        method: 'POST',
-        headers: getHeaders(token),
-        body: JSON.stringify({ userId, imageUrl, description, ddidResponse }),
-      });
-      
-      const result = await response.json();
-      
-      // If successful, save to local storage
-      if (result.success && result.data) {
-        await storageService.addInspection(userId, result.data.inspection);
-      }
-      
-      return result;
-    } catch (error) {
-      return handleApiError(error);
+    ddidResponse: string
+  ): Promise<{ success: boolean; message?: string; data?: { inspection: Inspection }}> {
+     const { data, error } = await supabase
+       .from('inspections')
+       .insert({
+         user_id: userId, // Ensure column name matches
+         image_url: imageUrl,
+         description: description,
+         ddid_response: ddidResponse,
+       })
+       .select() // Return the created record
+       .single(); // Expecting a single record back
+
+    if (error) {
+      handleSupabaseError(error, 'save inspection');
     }
+
+    return {
+      success: true,
+      message: 'Inspection saved successfully.',
+      data: { inspection: data as Inspection } // Cast needed if types don't perfectly align
+    };
   },
-  
+
   // Get all inspections for a user
-  async getInspections(userId: string, token: string): Promise<ApiResponse<{ inspections: Inspection[] }>> {
-    try {
-      const online = await isOnline();
-      
-      // If offline, get from local storage
-      if (!online) {
-        const localInspections = await storageService.getInspections(userId);
-        return {
-          success: true,
-          message: 'Loaded from local storage (offline mode)',
-          data: {
-            inspections: localInspections,
-          },
-        };
-      }
-      
-      // If online, try to get from server and update local storage
-      try {
-        const response = await fetch(`${API_URL}/inspections?userId=${userId}`, {
-          method: 'GET',
-          headers: getHeaders(token),
-        });
-        
-        const result = await response.json();
-        
-        // If successful, update local storage
-        if (result.success && result.data) {
-          await storageService.saveInspections(userId, result.data.inspections);
-          await storageService.updateLastSyncTimestamp(userId);
-          
-          // Process offline queue if any
-          await this.syncOfflineQueue(userId, token);
-        }
-        
-        return result;
-      } catch (serverError) {
-        console.error('Server error, falling back to local storage:', serverError);
-        
-        // Fall back to local storage
-        const localInspections = await storageService.getInspections(userId);
-        return {
-          success: true,
-          message: 'Server unavailable. Loaded from local storage.',
-          data: {
-            inspections: localInspections,
-          },
-        };
-      }
-    } catch (error) {
-      return handleApiError(error);
+  async getInspections(userId: string): Promise<{ success: boolean; message?: string; data?: { inspections: Inspection[] } }> {
+    const { data, error } = await supabase
+      .from('inspections')
+      .select('*')
+      .eq('user_id', userId) // Filter by user_id
+      .order('created_at', { ascending: false }); // Order by creation date
+
+    if (error) {
+      handleSupabaseError(error, 'get inspections');
     }
+
+    return {
+      success: true,
+      data: { inspections: data as Inspection[] }
+    };
   },
-  
+
   // Get a specific inspection
-  async getInspection(id: string, userId: string, token: string): Promise<ApiResponse<{ inspection: Inspection }>> {
-    try {
-      const online = await isOnline();
-      
-      // If offline, get from local storage
-      if (!online) {
-        const localInspections = await storageService.getInspections(userId);
-        const inspection = localInspections.find(insp => insp.id === id);
-        
-        if (!inspection) {
-          return {
-            success: false,
-            message: 'Inspection not found in local storage',
-          };
-        }
-        
-        return {
-          success: true,
-          message: 'Loaded from local storage (offline mode)',
-          data: {
-            inspection,
-          },
-        };
-      }
-      
-      // If online, get from server
-      const response = await fetch(`${API_URL}/inspections/${id}?userId=${userId}`, {
-        method: 'GET',
-        headers: getHeaders(token),
-      });
-      
-      return await response.json();
-    } catch (error) {
-      return handleApiError(error);
+  async getInspection(id: string): Promise<{ success: boolean; message?: string; data?: { inspection: Inspection } }> {
+     const { data, error } = await supabase
+       .from('inspections')
+       .select('*')
+       .eq('id', id)
+       .single(); // Expecting one result
+
+    if (error) {
+      handleSupabaseError(error, 'get single inspection');
     }
+     if (!data) {
+        return { success: false, message: 'Inspection not found.' };
+     }
+
+    return {
+      success: true,
+      data: { inspection: data as Inspection }
+    };
   },
-  
-  // Sync offline queue with server
-  async syncOfflineQueue(userId: string, token: string): Promise<void> {
-    try {
-      const online = await isOnline();
-      if (!online) {
-        console.log('Cannot sync offline queue: device is offline');
-        return;
+
+  // NOTE: syncOfflineQueue is removed as Supabase client doesn't handle this.
+};
+
+// --- User API calls using Supabase ---
+export const userApi = {
+  // Get user profile from public.users table
+  async getProfile(userId: string): Promise<{ success: boolean; message?: string; data?: { user: User } }> {
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', userId)
+      .single();
+
+    if (error) {
+      // It's common for a profile to not exist immediately after signup
+      // depending on trigger timing. Handle 'No rows found' gracefully.
+      if (error.code === 'PGRST116') { // PostgREST code for 'exact one row expected, 0 rows found'
+         return { success: false, message: 'User profile not found.' };
       }
-      
-      const queue = await storageService.getOfflineQueue(userId);
-      if (queue.length === 0) {
-        return;
-      }
-      
-      console.log(`Processing ${queue.length} items in offline queue`);
-      
-      for (const item of queue) {
-        try {
-          if (item.type === 'create') {
-            // Create inspection on server
-            await fetch(`${API_URL}/inspections`, {
-              method: 'POST',
-              headers: getHeaders(token),
-              body: JSON.stringify({ userId, ...item.data }),
-            });
-          } else if (item.type === 'update') {
-            // Update inspection on server
-            await fetch(`${API_URL}/inspections/${item.data.id}`, {
-              method: 'PUT',
-              headers: getHeaders(token),
-              body: JSON.stringify({ userId, ...item.data }),
-            });
-          } else if (item.type === 'delete') {
-            // Delete inspection on server
-            await fetch(`${API_URL}/inspections/${item.data.id}?userId=${userId}`, {
-              method: 'DELETE',
-              headers: getHeaders(token),
-            });
-          }
-          
-          // Remove processed item from queue
-          await storageService.removeFromOfflineQueue(userId, item.id);
-        } catch (error) {
-          console.error(`Error processing queue item ${item.id}:`, error);
-          // Continue with next item
-        }
-      }
-      
-      console.log('Offline queue processed');
-    } catch (error) {
-      console.error('Error syncing offline queue:', error);
+      handleSupabaseError(error, 'get profile');
     }
+     if (!data) {
+        return { success: false, message: 'User profile not found.' };
+     }
+
+    // Map Supabase snake_case to camelCase if needed by the interface
+    const userProfile: User = {
+      id: data.id,
+      email: data.email, // Assuming email is also in your users table
+      full_name: data.full_name,
+      state: data.state,
+      profile_image_url: data.profile_image_url,
+      created_at: data.created_at,
+      updated_at: data.updated_at
+    };
+
+
+    return { success: true, data: { user: userProfile } };
+  },
+
+  // Update user profile in public.users table
+  async updateProfile(
+    userId: string,
+    // Use snake_case matching Supabase columns
+    updateData: { full_name?: string; state?: string; profile_image_url?: string | null }
+  ): Promise<{ success: boolean; message?: string; data?: { user: User } }> {
+
+    // Remove undefined fields to avoid overwriting existing values with null
+    const validUpdateData = Object.entries(updateData).reduce((acc, [key, value]) => {
+        if (value !== undefined) {
+            // Cast key to keyof typeof updateData if necessary, or keep accumulator general
+            (acc as any)[key] = value;
+        }
+        return acc;
+    // Start with an empty object type that allows string keys
+    }, {} as { [key: string]: any });
+
+
+    if (Object.keys(validUpdateData).length === 0) {
+       return { success: true, message: "No changes provided." };
+    }
+
+
+    const { data, error } = await supabase
+      .from('users')
+      .update(validUpdateData)
+      .eq('id', userId)
+      .select()
+      .single();
+
+    if (error) {
+      handleSupabaseError(error, 'update profile');
+    }
+
+    // Map response back if necessary
+     const updatedProfile: User = {
+      id: data.id,
+      email: data.email,
+      full_name: data.full_name,
+      state: data.state,
+      profile_image_url: data.profile_image_url,
+      created_at: data.created_at,
+      updated_at: data.updated_at
+    };
+
+
+    return { success: true, message: 'Profile updated successfully.', data: { user: updatedProfile } };
+  },
+
+  // Moved updatePassword here from authApi
+  async updatePassword(
+    newPassword: string
+  ): Promise<{ success: boolean; message?: string }> {
+    const { error } = await supabase.auth.updateUser({
+       password: newPassword
+    });
+
+    if (error) {
+      // Handle potential errors like "New password should be different from the old password."
+      handleSupabaseError(error, 'update password');
+    }
+
+    return { success: true, message: 'Password updated successfully.' };
   },
 };
 
-// User API calls
-export const userApi = {
-  // Get user profile
-  async getProfile(userId: string, token: string): Promise<ApiResponse<{ user: User }>> {
-    try {
-      const online = await isOnline();
-      if (!online) {
-        throw new Error('No internet connection. Unable to load profile.');
-      }
-      
-      const response = await fetch(`${API_URL}/user/profile?userId=${userId}`, {
-        method: 'GET',
-        headers: getHeaders(token),
-      });
-      
-      return await response.json();
-    } catch (error) {
-      return handleApiError(error);
-    }
-  },
-  
-  // Update user profile
-  async updateProfile(
-    userId: string,
-    data: { fullName?: string; state?: string; profileImageUrl?: string },
-    token: string
-  ): Promise<ApiResponse<{ user: User }>> {
-    try {
-      const online = await isOnline();
-      if (!online) {
-        // Add to offline queue for later update
-        await storageService.addToOfflineQueue(userId, {
-          type: 'update',
-          data: {
-            id: userId,
-            ...data,
-          },
-        });
-        
-        return {
-          success: true,
-          message: 'Profile update queued for when you\'re back online',
-        };
-      }
-      
-      const response = await fetch(`${API_URL}/user/profile?userId=${userId}`, {
-        method: 'PUT',
-        headers: getHeaders(token),
-        body: JSON.stringify(data),
-      });
-      
-      return await response.json();
-    } catch (error) {
-      return handleApiError(error);
-    }
-  },
-  
-  // Update user password
-  async updatePassword(
-    userId: string,
-    currentPassword: string,
-    newPassword: string,
-    token: string
-  ): Promise<ApiResponse<void>> {
-    try {
-      const online = await isOnline();
-      if (!online) {
-        throw new Error('No internet connection. Password update requires internet connectivity.');
-      }
-      
-      const response = await fetch(`${API_URL}/user/password?userId=${userId}`, {
-        method: 'PUT',
-        headers: getHeaders(token),
-        body: JSON.stringify({ currentPassword, newPassword }),
-      });
-      
-      return await response.json();
-    } catch (error) {
-      return handleApiError(error);
-    }
-  },
-}; 
+// Removed: API_URL constant (except where needed), handleApiError, getHeaders, isOnline
+// Removed: storageService dependency (for offline queue)
+// Removed: NetInfo dependency
+// Removed: verifyEmail function
+// Removed: syncOfflineQueue function
+// Note: Ensure Constants.expoConfig.extra.apiUrl is still configured if needed for generateDDID
+
+// Removed: handleApiError, getHeaders, isOnline, verifyEmail, syncOfflineQueue
+// Note: Ensure Constants.expoConfig.extra.apiUrl is still configured if needed for generateDDID 

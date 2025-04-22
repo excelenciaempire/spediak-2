@@ -1,4 +1,4 @@
-import React, { useState, useLayoutEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, 
   Text, 
@@ -11,7 +11,8 @@ import {
   ScrollView, 
   Alert,
   Animated,
-  Easing
+  Easing,
+  Platform
 } from 'react-native';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { Colors } from '@/constants/Colors';
@@ -22,6 +23,9 @@ import DrawerButton from '@/components/DrawerButton';
 import { useAuth } from '@/context/AuthContext';
 import { inspectionApi } from '@/services/api';
 import * as Clipboard from 'expo-clipboard';
+import { supabase } from '@/services/supabaseClient';
+import * as FileSystem from 'expo-file-system';
+import { ImagePickerAsset } from 'expo-image-picker';
 // Note: expo-speech-recognition might not be directly available
 // In a real implementation, you would use expo-speech or a similar package
 // For this example, we'll mock the interface
@@ -30,18 +34,30 @@ import * as Clipboard from 'expo-clipboard';
 // Mock Speech Recognition interface
 const Speech = {
   requestPermissionsAsync: async (): Promise<{ status: string }> => {
+    // Simulate asking for mic permission
+    console.log("Requesting mic permission...");
     return { status: 'granted' };
   },
   startListeningAsync: async ({ onResult, onError }: { 
     onResult: (result: { transcript: string }) => void, 
     onError: (error: any) => void 
   }) => {
-    // Mock implementation that would simulate voice-to-text
+    console.log("Starting mock speech recognition...");
     setTimeout(() => {
-      onResult({ transcript: 'This is a sample transcription.' });
-    }, 2000);
+        const transcripts = [
+            "Replace the damaged front bumper cover.",
+            "Minor scratch on the driver side door, recommend buffing.",
+            "Rear taillight assembly needs replacement, lens is cracked.",
+            "Significant dent on the passenger side rear quarter panel.",
+            "Windshield has a chip, suggest resin injection repair."
+        ];
+        const randomTranscript = transcripts[Math.floor(Math.random() * transcripts.length)];
+        console.log("Mock speech result:", randomTranscript);
+        onResult({ transcript: randomTranscript });
+    }, 2500); // Simulate listening time
   },
   stopListeningAsync: async () => {
+    console.log("Stopping mock speech recognition...");
     // Mock implementation
   }
 };
@@ -51,13 +67,12 @@ interface SpeechResult {
 }
 
 export default function NewInspectionScreen() {
-  // Will always be 'light'
-  const colorScheme = useColorScheme();
+  const colorScheme = useColorScheme() || 'light';
   const navigation = useNavigation();
-  const { user, token } = useAuth();
+  const { authUser, user } = useAuth();
   
   // Set up the drawer menu button in the header
-  useLayoutEffect(() => {
+  useEffect(() => {
     navigation.setOptions({
       headerLeft: () => <DrawerButton />,
     });
@@ -68,7 +83,7 @@ export default function NewInspectionScreen() {
   const slideAnim = useRef(new Animated.Value(50)).current;
   
   // Start animations when the component mounts
-  useLayoutEffect(() => {
+  useEffect(() => {
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -85,36 +100,119 @@ export default function NewInspectionScreen() {
     ]).start();
   }, [fadeAnim, slideAnim]);
   
-  const [image, setImage] = useState<string | null>(null);
+  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [description, setDescription] = useState('');
   const [isRecording, setIsRecording] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
   const [ddidResponse, setDdidResponse] = useState<string | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [copiedToClipboard, setCopiedToClipboard] = useState(false);
 
-  // Check if either image or description is missing
-  const isGenerateDisabled = !image || !description;
+  // Generate button disabled if no *uploaded* image URL or no description, or during generation/upload
+  const isGenerateDisabled = !uploadedImageUrl || !description || isGenerating || isUploading;
+
+  // Function to upload image to Supabase Storage
+  const uploadImage = async (asset: ImagePickerAsset): Promise<string | null> => {
+    if (!authUser?.id) {
+      setUploadError('User not logged in.');
+      return null;
+    }
+    setIsUploading(true);
+    setUploadError(null);
+    setUploadedImageUrl(null);
+
+    try {
+      // Still use URI to determine extension and filename
+      const uri = asset.uri;
+      const fileExtension = uri.split('.').pop()?.toLowerCase() || 'jpg';
+      const contentType = `image/${fileExtension === 'jpg' ? 'jpeg' : fileExtension}`;
+      const fileName = `${Date.now()}.${fileExtension}`;
+      const filePath = `${authUser.id}/${fileName}`;
+      const BUCKET_NAME = 'inspection_images';
+
+      let blob: Blob;
+
+      // Platform-specific handling to get the Blob
+      if (Platform.OS === 'web') {
+        // On web, fetch the blob URI to get the Blob object
+        // This might still face issues depending on browser security
+        console.log("Attempting to fetch web asset URI:", uri);
+        const response = await fetch(uri);
+        if (!response.ok) {
+          console.error("Fetch failed for web URI:", uri, "Status:", response.status, "Status text:", response.statusText);
+          // Try to provide a more specific error message if possible
+          let errorMessage = `Failed to fetch web image file. Status: ${response.status}`;
+          if (response.status === 0) { // Often indicates a CORS or network error
+             errorMessage += ' (Network error or CORS issue likely)';
+          }
+          throw new Error(errorMessage);
+        }
+        blob = await response.blob();
+        console.log("Web fetch successful, got blob:", blob);
+      } else {
+        // Native platform: fetch the file URI (this worked previously)
+        const response = await fetch(uri);
+        if (!response.ok) throw new Error('Failed to fetch local image file.');
+        blob = await response.blob();
+      }
+
+      console.log(`Uploading blob (Size: ${blob.size}, Type: ${blob.type}) to path: ${filePath}`);
+
+      // Upload the blob to Supabase
+      const { error: uploadError } = await supabase.storage
+        .from(BUCKET_NAME)
+        .upload(filePath, blob, { contentType, upsert: false });
+
+      if (uploadError) {
+        // Log the detailed Supabase error
+        console.error('Supabase upload error details:', uploadError);
+        throw new Error(`Supabase upload error: ${uploadError.message}`);
+      }
+
+      // Get public URL
+      const { data: publicUrlData } = supabase.storage
+        .from(BUCKET_NAME)
+        .getPublicUrl(filePath);
+
+      const publicUrl = publicUrlData?.publicUrl;
+      if (!publicUrl) {
+        throw new Error('Upload successful, but could not get public URL. Check bucket permissions.');
+      }
+
+      console.log('Upload successful. Public URL:', publicUrl);
+      setUploadedImageUrl(publicUrl);
+      return publicUrl;
+
+    } catch (error: any) {
+      console.error('Error in uploadImage function:', error); // Log the caught error
+      setUploadError(`Upload failed: ${error.message}`);
+      // Don't clear the preview URI on failure
+      // setImageUri(null);
+      return null;
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   const pickImage = async () => {
     try {
-      // No permissions request is necessary for launching the image library
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [4, 3],
-        quality: 1,
+        quality: 0.8,
       });
 
-      if (!result.canceled) {
-        // Check file size (approximate calculation, can be refined)
-        const fileSize = result.assets[0].fileSize || 0;
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        const fileSize = asset.fileSize || 0;
         
-        // Check if file size is greater than 5MB (5 * 1024 * 1024 bytes)
         if (fileSize > 5 * 1024 * 1024) {
           Alert.alert(
             'File Too Large',
@@ -124,7 +222,10 @@ export default function NewInspectionScreen() {
           return;
         }
         
-        setImage(result.assets[0].uri);
+        setApiError(null);
+        setUploadError(null);
+        setImageUri(asset.uri); // Set preview
+        await uploadImage(asset); // Pass the full asset object
       }
     } catch (error) {
       console.error('Error picking image:', error);
@@ -135,36 +236,32 @@ export default function NewInspectionScreen() {
   const takePhoto = async () => {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      
       if (status !== 'granted') {
-        Alert.alert(
-          'Permission Required',
-          'Camera permission is required to take photos',
-          [{ text: 'OK' }]
-        );
+        Alert.alert('Permission Required','Camera permission is required to take photos');
         return;
       }
 
       const result = await ImagePicker.launchCameraAsync({
         allowsEditing: true,
         aspect: [4, 3],
-        quality: 1,
+        quality: 0.8, // Slightly reduce quality
       });
 
-      if (!result.canceled) {
-        const fileSize = result.assets[0].fileSize || 0;
-        
-        // Check if file size is greater than 5MB
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+         // NOTE: Camera photos might not have reliable fileSize on all platforms/versions
+         // Consider adding checks after upload if needed, or rely on storage limits.
+         // Fix: Declare fileSize before using it
+         const fileSize = asset.fileSize || 0;
+        setApiError(null); // Clear previous API errors
+        setUploadError(null); // Clear previous upload errors
+        // Check size (e.g., 5MB limit)
         if (fileSize > 5 * 1024 * 1024) {
-          Alert.alert(
-            'File Too Large',
-            'Image size exceeds 5MB limit. Please try again with a smaller image.',
-            [{ text: 'OK' }]
-          );
-          return;
+           Alert.alert('File Too Large','Image size exceeds 5MB limit. Please try again.');
+           return;
         }
-        
-        setImage(result.assets[0].uri);
+        setImageUri(asset.uri); // Set local URI for preview
+        await uploadImage(asset); // Start upload
       }
     } catch (error) {
       console.error('Error taking photo:', error);
@@ -185,12 +282,13 @@ export default function NewInspectionScreen() {
       }
 
       setIsRecording(true);
+      setApiError(null);
       await Speech.startListeningAsync({
         onResult: (result: SpeechResult) => {
-          setDescription(result.transcript);
+          setDescription(prev => prev ? `${prev} ${result.transcript}` : result.transcript);
         },
         onError: (error: any) => {
-          console.log(error);
+          console.log('Speech recognition error:', error);
           setIsRecording(false);
         },
       });
@@ -215,88 +313,95 @@ export default function NewInspectionScreen() {
   };
 
   const handleGenerateDDID = async () => {
-    if (!image) {
-      setError('Please select an image first');
+    if (!uploadedImageUrl) {
+      if (isUploading) {
+        setApiError('Please wait for the image to finish uploading.');
+      } else if (uploadError) {
+        setApiError(`Image upload failed: ${uploadError}. Please select image again.`);
+      } else if (!imageUri) {
+         setApiError('Please select an image first.');
+      } else {
+         setApiError('Image is not ready for generation. Try selecting again.');
+      }
       return;
     }
 
     if (!description) {
-      setError('Please provide a description');
+      setApiError('Please provide a description');
       return;
     }
 
-    if (!user || !token) {
-      setError('You must be logged in to generate a DDID report');
+    if (!authUser) {
+      setApiError('You must be logged in to generate a DDID report');
       return;
     }
 
-    setError(null);
-    setLoading(true);
+    setApiError(null);
+    setIsGenerating(true);
     
     try {
       const response = await inspectionApi.generateDDID(
-        image,
+        uploadedImageUrl!,
         description,
-        user.id,
-        token
+        authUser!.id
       );
       
-      if (!response.success || !response.data) {
-        throw new Error(response.message || 'Failed to generate DDID');
+      if (!response.data?.ddidResponse) {
+        throw new Error(response.message || 'Failed to generate DDID: No response data');
       }
       
       setDdidResponse(response.data.ddidResponse);
       setModalVisible(true);
     } catch (error: any) {
       console.error('Error generating DDID:', error);
-      setError(error.message || 'An error occurred while generating the DDID report');
+      setApiError(error.message || 'An error occurred while generating the DDID report');
     } finally {
-      setLoading(false);
+      setIsGenerating(false);
     }
   };
 
   const handleSaveInspection = async () => {
-    if (!ddidResponse || !image || !description || !user?.id || !token) {
-      setError('Missing required information to save inspection');
+    if (!ddidResponse || !uploadedImageUrl || !description || !authUser?.id) {
+      setApiError('Missing required information to save inspection (Ensure image uploaded and DDID generated)');
       return;
     }
 
     setIsSaving(true);
     setSaveSuccess(false);
+    setApiError(null);
     
     try {
       const response = await inspectionApi.saveInspection(
-        user.id,
-        image,
+        authUser!.id,
+        uploadedImageUrl!,
         description,
-        ddidResponse,
-        token
+        ddidResponse!
       );
       
-      if (!response.success) {
-        throw new Error(response.message || 'Failed to save inspection');
+      if (!response.data?.inspection) {
+        throw new Error(response.message || 'Failed to save inspection: No response data');
       }
       
       setSaveSuccess(true);
       
-      // Reset form after successful save
       setTimeout(() => {
         setModalVisible(false);
-        setImage(null);
+        setImageUri(null);
+        setUploadedImageUrl(null);
         setDescription('');
         setDdidResponse(null);
         setSaveSuccess(false);
       }, 1500);
     } catch (error: any) {
       console.error('Error saving inspection:', error);
-      setError(error.message || 'An error occurred while saving the inspection');
+      setApiError(error.message || 'An error occurred while saving the inspection');
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleNewInspection = () => {
-    if (image || description) {
+    if (imageUri || description) { 
       Alert.alert(
         'Clear Current Inspection?',
         'This will clear your current image and description. Continue?',
@@ -308,10 +413,12 @@ export default function NewInspectionScreen() {
           {
             text: 'Clear',
             onPress: () => {
-              setImage(null);
+              setImageUri(null);
+              setUploadedImageUrl(null);
               setDescription('');
               setDdidResponse(null);
-              setError(null);
+              setApiError(null);
+              setUploadError(null);
             },
             style: 'destructive',
           },
@@ -345,30 +452,46 @@ export default function NewInspectionScreen() {
           }
         ]}
       >
-        {/* Error message if any */}
-        {error && (
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>{error}</Text>
+        {/* API Error message */}
+        {apiError && (
+          <View style={[styles.errorContainer, { borderLeftColor: Colors.light.danger }]}>
+            <Text style={[styles.errorText, { color: Colors.light.danger }]}>{apiError}</Text>
           </View>
+        )}
+        {/* Upload Error message */}
+        {uploadError && (
+           <View style={[styles.errorContainer, { borderLeftColor: Colors.light.warning, backgroundColor: '#FFF8E1' }]}>
+             <Text style={[styles.errorText, { color: Colors.light.warning }]}>{uploadError}</Text>
+           </View>
         )}
 
         {/* Image Upload Area */}
         <TouchableOpacity
-          style={[styles.imageUploadArea, !image && styles.imageUploadAreaEmpty]}
+          style={[
+              styles.imageUploadArea, 
+              !imageUri && styles.imageUploadAreaEmpty,
+              uploadError && styles.uploadAreaError
+          ]}
           onPress={() => {
-            Alert.alert(
-              'Upload Image', 
-              'Choose an option', 
-              [
-                {text: 'Take Photo', onPress: takePhoto},
-                {text: 'Choose from Gallery', onPress: pickImage},
-                {text: 'Cancel', style: 'cancel'}
-              ]
-            );
+            if (Platform.OS === 'web') {
+              // On web, directly trigger file picker
+              pickImage(); 
+            } else {
+              // On native, show options alert
+              Alert.alert(
+                'Upload Image', 
+                'Choose an option', 
+                [
+                  {text: 'Take Photo', onPress: takePhoto},
+                  {text: 'Choose from Gallery', onPress: pickImage},
+                  {text: 'Cancel', style: 'cancel'}
+                ]
+              );
+            }
           }}
         >
-          {image ? (
-            <Image source={{ uri: image }} style={styles.uploadedImage} />
+          {imageUri ? (
+            <Image source={{ uri: imageUri }} style={styles.uploadedImage} />
           ) : (
             <View style={styles.uploadPlaceholder}>
               <Ionicons name="camera" size={40} color={Colors.light.icon} />
@@ -377,6 +500,13 @@ export default function NewInspectionScreen() {
               </Text>
             </View>
           )}
+          {/* Uploading Indicator */}
+           {isUploading && (
+             <View style={styles.uploadingOverlay}>
+               <ActivityIndicator size="large" color={Colors.light.primary} />
+               <Text style={styles.uploadingText}>Uploading...</Text>
+             </View>
+           )}
         </TouchableOpacity>
 
         {/* Description Input */}
@@ -391,7 +521,7 @@ export default function NewInspectionScreen() {
               }
             ]}
             placeholder="Describe the issue..."
-            placeholderTextColor={Colors.light.tabIconDefault}
+            placeholderTextColor={Colors.light.placeholder}
             value={description}
             onChangeText={setDescription}
             multiline
@@ -399,14 +529,14 @@ export default function NewInspectionScreen() {
           <TouchableOpacity
             style={[
               styles.micButton,
-              isRecording && { backgroundColor: Colors.light.error }
+              isRecording && { backgroundColor: Colors.light.danger }
             ]}
             onPress={isRecording ? stopVoiceToText : startVoiceToText}
           >
             <Ionicons 
               name={isRecording ? "mic" : "mic-outline"} 
               size={24} 
-              color={Colors.light.secondary} 
+              color={Colors.light.background}
             />
           </TouchableOpacity>
         </View>
@@ -416,13 +546,13 @@ export default function NewInspectionScreen() {
           style={[
             styles.generateButton,
             isGenerateDisabled && styles.disabledButton,
-            { backgroundColor: isGenerateDisabled ? '#cccccc' : Colors.light.accent }
+            { backgroundColor: isGenerateDisabled ? Colors.light.grey : Colors.light.primary }
           ]}
           onPress={handleGenerateDDID}
-          disabled={isGenerateDisabled || isLoading}
+          disabled={isGenerateDisabled || isGenerating}
         >
-          {isLoading ? (
-            <ActivityIndicator color={Colors.light.secondary} />
+          {isGenerating ? (
+            <ActivityIndicator color={Colors.light.background} />
           ) : (
             <Text style={styles.generateButtonText}>Generate DDID Response</Text>
           )}
@@ -432,11 +562,11 @@ export default function NewInspectionScreen() {
         <TouchableOpacity
           style={[
             styles.newInspectionButton,
-            { borderColor: Colors.light.accent }
+            { borderColor: Colors.light.primary }
           ]}
           onPress={handleNewInspection}
         >
-          <Text style={[styles.newInspectionButtonText, { color: Colors.light.accent }]}>
+          <Text style={[styles.newInspectionButtonText, { color: Colors.light.primary }]}> 
             New Inspection
           </Text>
         </TouchableOpacity>
@@ -519,10 +649,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     width: '100%',
     borderLeftWidth: 4,
-    borderLeftColor: Colors.light.error,
   },
   errorText: {
-    color: Colors.light.error,
     fontSize: 14,
   },
   imageUploadArea: {
@@ -571,7 +699,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 8,
     bottom: 8,
-    backgroundColor: '#0D47A1',
+    backgroundColor: Colors.light.primary,
     width: 40,
     height: 40,
     borderRadius: 20,
@@ -590,7 +718,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   generateButtonText: {
-    color: 'white',
+    color: Colors.light.background,
     fontWeight: 'bold',
     fontSize: 16,
   },
@@ -618,10 +746,7 @@ const styles = StyleSheet.create({
     maxHeight: '90%',
     borderRadius: 16,
     padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    boxShadow: '0px 2px 3.84px rgba(0, 0, 0, 0.25)',
     elevation: 5,
   },
   modalHeader: {
@@ -657,7 +782,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   saveButtonText: {
-    color: '#FFFFFF',
+    color: Colors.light.background,
     fontWeight: 'bold',
     fontSize: 16,
   },
@@ -672,5 +797,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     marginLeft: 8,
+  },
+  uploadAreaError: {
+    borderColor: Colors.light.danger,
+  },
+  uploadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  uploadingText: {
+    marginTop: 8,
+    color: Colors.light.primary,
+    fontWeight: 'bold',
   },
 }); 

@@ -1,50 +1,102 @@
-# Welcome to your Expo app 👋
+# Spediak - DDID Statement Generator App
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Spediak is a mobile application for building inspectors to generate DDID (Description, Defect, Impact, Directive) statements based on their observations.
 
-## Get started
+## Features
 
-1. Install dependencies
+- User authentication with JWT tokens
+- Secure password handling
+- Profile management
+- Inspection history tracking
+- Offline capability for inspections
+- DDID statement generation
 
-   ```bash
-   npm install
-   ```
+## Tech Stack
 
-2. Start the app
+- **Frontend**: React Native with Expo
+- **Backend**: Node.js with Express
+- **Authentication**: JWT-based auth with secure storage
+- **State Management**: React Context API
+- **Styling**: React Native StyleSheet
 
-   ```bash
-    npx expo start
-   ```
+## Getting Started
 
-In the output, you'll find options to open the app in a
+### Prerequisites
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+- Node.js (>=18.0.0)
+- npm or yarn
+- Expo CLI
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+### Installation
 
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+1. Clone the repository
+```
+git clone <repository-url>
+cd Spediak
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+2. Install dependencies
+```
+npm install
+cd backend && npm install && cd ..
+```
 
-## Learn more
+3. Set up environment variables
+```
+cp backend/.env.example backend/.env
+```
+Edit the `.env` file and replace the JWT_SECRET with a secure random string.
 
-To learn more about developing your project with Expo, look at the following resources:
+### Running the App
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+#### Run both frontend and backend together
+```
+npm run dev
+```
 
-## Join the community
+#### Run separately
 
-Join our community of developers creating universal apps.
+Backend:
+```
+cd backend
+npm run dev
+```
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+Frontend:
+```
+npm run dev:frontend
+```
+
+### Testing the App
+
+1. Open the Expo app on your phone or use an emulator
+2. Sign up with a new account
+3. Log in with your credentials
+4. Use the app to create inspections and generate DDID statements
+
+## API Endpoints
+
+The application includes the following API endpoints:
+
+- **Authentication**
+  - `POST /api/v1/auth/signup` - Register a new user
+  - `POST /api/v1/auth/login` - Login an existing user
+  - `GET /api/v1/auth/verify/:token` - Verify email
+
+- **User Management**
+  - `GET /api/v1/user/profile` - Get user profile
+  - `PUT /api/v1/user/profile` - Update user profile
+  - `PUT /api/v1/user/password` - Update user password
+
+- **Inspections**
+  - `POST /api/v1/inspections/generate-ddid` - Generate DDID from image and description
+  - `POST /api/v1/inspections` - Save a new inspection
+  - `GET /api/v1/inspections` - Get all inspections for a user
+  - `GET /api/v1/inspections/:id` - Get a specific inspection
+
+## Security
+
+- All API endpoints (except auth routes) are protected with JWT authentication
+- Passwords are hashed using bcrypt
+- Tokens are stored securely using Expo SecureStore
+- Environment variables are used for sensitive configuration

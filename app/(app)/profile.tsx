@@ -1,4 +1,4 @@
-import React, { useState, useLayoutEffect } from 'react';
+import React, { useState, useLayoutEffect, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Image, Alert, ActivityIndicator } from 'react-native';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { Colors } from '@/constants/Colors';
@@ -6,40 +6,28 @@ import { Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
 import { useNavigation } from '@react-navigation/native';
 import DrawerButton from '@/components/DrawerButton';
-
-// Mock user data
-const MOCK_USER = {
-  fullName: 'John Smith',
-  email: 'john.smith@example.com',
-  state: 'North Carolina',
-  profileImageUrl: undefined, // Changed from null to undefined
-};
+import { useAuth } from '@/context/AuthContext';
+import { userApi } from '@/services/api';
 
 // List of states for the picker
 const STATES = [
-  'Alabama', 'Alaska', 'Arizona', 'Arkansas', 'California', 
-  'Colorado', 'Connecticut', 'Delaware', 'Florida', 'Georgia', 
-  'Hawaii', 'Idaho', 'Illinois', 'Indiana', 'Iowa', 
-  'Kansas', 'Kentucky', 'Louisiana', 'Maine', 'Maryland', 
-  'Massachusetts', 'Michigan', 'Minnesota', 'Mississippi', 'Missouri', 
-  'Montana', 'Nebraska', 'Nevada', 'New Hampshire', 'New Jersey', 
-  'New Mexico', 'New York', 'North Carolina', 'North Dakota', 'Ohio', 
-  'Oklahoma', 'Oregon', 'Pennsylvania', 'Rhode Island', 'South Carolina', 
-  'South Dakota', 'Tennessee', 'Texas', 'Utah', 'Vermont', 
-  'Virginia', 'Washington', 'West Virginia', 'Wisconsin', 'Wyoming'
+  'North Carolina',
+  'South Carolina',
 ];
 
 export default function ProfileSettingsScreen() {
   // Will always return 'light'
   const colorScheme = useColorScheme();
   const navigation = useNavigation();
-  const [fullName, setFullName] = useState(MOCK_USER.fullName);
-  const [email] = useState(MOCK_USER.email); // Email is read-only
+  const { user, token, logout } = useAuth();
+  
+  const [fullName, setFullName] = useState(user?.fullName || '');
+  const [email] = useState(user?.email || ''); // Email is read-only
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [state, setState] = useState(MOCK_USER.state);
-  const [profileImageUrl, setProfileImageUrl] = useState<string | undefined>(MOCK_USER.profileImageUrl);
+  const [state, setState] = useState(user?.state || 'North Carolina');
+  const [profileImageUrl, setProfileImageUrl] = useState<string | null>(user?.profileImageUrl || null);
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   
@@ -49,6 +37,15 @@ export default function ProfileSettingsScreen() {
   // Add loading states
   const [isProfileLoading, setIsProfileLoading] = useState(false);
   const [isPasswordLoading, setIsPasswordLoading] = useState(false);
+
+  // Update local state when user data changes
+  useEffect(() => {
+    if (user) {
+      setFullName(user.fullName);
+      setState(user.state);
+      setProfileImageUrl(user.profileImageUrl);
+    }
+  }, [user]);
 
   // Set up the drawer menu button in the header
   useLayoutEffect(() => {
@@ -99,45 +96,52 @@ export default function ProfileSettingsScreen() {
     if (!validatePassword()) {
       return;
     }
-
     setIsPasswordLoading(true);
-    
+    setErrors({});
     try {
-      // Simulate API call with a delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // In a real app, this would call an API to update the password
+      const response = await userApi.updatePassword(newPassword);
+      if (!response.success) {
+        throw new Error(response.message || 'Failed to update password');
+      }
       Alert.alert('Success', 'Password updated successfully');
-      
-      // Clear password fields
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-      setErrors({});
-    } catch (error) {
-      Alert.alert('Error', 'Failed to update password. Please try again.');
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to update password. Please try again.');
+      setErrors({ apiError: error.message });
     } finally {
       setIsPasswordLoading(false);
     }
   };
 
   const handleSaveProfile = async () => {
-    if (!validateProfile()) {
+    if (!validateProfile() || !user || !token) {
       return;
     }
     
     setIsProfileLoading(true);
     
     try {
-      // Simulate API call with a delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const response = await userApi.updateProfile(
+        user.id,
+        {
+          fullName,
+          state,
+          profileImageUrl
+        },
+        token
+      );
       
-      // In a real app, this would call an API to update the profile
+      if (!response.success) {
+        throw new Error(response.message || 'Failed to update profile');
+      }
+      
       Alert.alert('Success', 'Profile updated successfully');
       setIsEditing(false);
       setErrors({});
-    } catch (error) {
-      Alert.alert('Error', 'Failed to update profile. Please try again.');
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to update profile. Please try again.');
     } finally {
       setIsProfileLoading(false);
     }
@@ -151,6 +155,21 @@ export default function ProfileSettingsScreen() {
       // Start editing
       setIsEditing(true);
     }
+  };
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Confirm Logout',
+      'Are you sure you want to log out?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Log Out', 
+          onPress: () => logout(),
+          style: 'destructive'
+        },
+      ]
+    );
   };
 
   const changeProfilePicture = () => {
@@ -182,7 +201,7 @@ export default function ProfileSettingsScreen() {
           text: 'Remove Photo', 
           onPress: () => {
             console.log('Remove Photo pressed');
-            setProfileImageUrl(undefined);
+            setProfileImageUrl(null);
           },
           style: 'destructive'
         },
@@ -190,6 +209,15 @@ export default function ProfileSettingsScreen() {
       ]
     );
   };
+  
+  // If no user, show loading
+  if (!user) {
+    return (
+      <View style={[styles.container, styles.centeredContainer]}>
+        <ActivityIndicator size="large" color={Colors.light.tint} />
+      </View>
+    );
+  }
 
   return (
     <ScrollView 
@@ -198,257 +226,238 @@ export default function ProfileSettingsScreen() {
     >
       {/* Profile Image Section */}
       <View style={styles.profileImageContainer}>
-        <TouchableOpacity onPress={changeProfilePicture}>
-          {profileImageUrl ? (
-            <Image
-              source={{ uri: profileImageUrl }}
-              style={styles.profileImage}
-            />
-          ) : (
-            <View 
-              style={[
-                styles.defaultProfileImage, 
-                { backgroundColor: Colors.light.tint }
-              ]}
-            >
-              <Text style={[styles.profileInitials, { color: Colors.light.secondary }]}>
-                {fullName.split(' ').map(n => n[0]).join('')}
-              </Text>
-            </View>
-          )}
-          <View style={[styles.editBadge, { backgroundColor: Colors.light.accent }]}>
-            <Ionicons name="camera" size={16} color="#FFFFFF" />
+        {profileImageUrl ? (
+          <Image 
+            source={{ uri: profileImageUrl }} 
+            style={styles.profileImage} 
+          />
+        ) : (
+          <View style={[styles.profileImagePlaceholder, { backgroundColor: Colors.light.tabIconDefault }]}>
+            <Ionicons name="person" size={50} color="#fff" />
           </View>
+        )}
+        
+        <TouchableOpacity 
+          style={[styles.changeImageButton, { backgroundColor: Colors.light.accent }]}
+          onPress={changeProfilePicture}
+        >
+          <Ionicons name="camera" size={20} color="#fff" />
         </TouchableOpacity>
       </View>
+      
+      {/* Add Logout Button */}
+      <TouchableOpacity 
+        style={styles.logoutButton}
+        onPress={handleLogout}
+      >
+        <Ionicons name="log-out-outline" size={22} color={Colors.light.danger} />
+        <Text style={[styles.logoutButtonText, { color: Colors.light.danger }]}>
+          Log Out
+        </Text>
+      </TouchableOpacity>
 
-      {/* Profile Form */}
-      <View style={styles.formSection}>
-        <View style={styles.sectionHeader}>
+      {/* Display API Errors */}
+       {errors.apiError && (
+          <View style={[styles.apiErrorContainer, { backgroundColor: 'rgba(255, 0, 0, 0.1)' }]}>
+             <Text style={[styles.errorText, { color: Colors.light.danger }]}>{errors.apiError}</Text>
+          </View>
+       )}
+
+      {/* Profile Section */}
+      <View style={styles.sectionContainer}>
+        <View style={styles.sectionHeaderContainer}>
           <Text style={[styles.sectionTitle, { color: Colors.light.text }]}>
-            Personal Information
+            Profile Information
           </Text>
-          <TouchableOpacity 
-            onPress={toggleEdit}
-            disabled={isProfileLoading}
-          >
+          <TouchableOpacity onPress={toggleEdit}>
             <Text style={[styles.editButton, { color: Colors.light.accent }]}>
-              {isEditing ? (isProfileLoading ? 'Saving...' : 'Save') : 'Edit'}
+              {isEditing ? 'Save' : 'Edit'}
             </Text>
           </TouchableOpacity>
         </View>
-
-        {/* Full Name Field */}
-        <View style={styles.formGroup}>
-          <Text style={[styles.label, { color: Colors.light.text }]}>Full Name</Text>
+        
+        {/* Email */}
+        <View style={styles.fieldContainer}>
+          <Text style={[styles.fieldLabel, { color: Colors.light.tabIconDefault }]}>
+            Email
+          </Text>
           <TextInput
             style={[
-              styles.input,
-              { 
-                color: Colors.light.text,
-                backgroundColor: Colors.light.secondary,
-                borderColor: errors.fullName ? Colors.light.error : isEditing ? Colors.light.accent : '#EEEEEE',
-              }
-            ]}
-            value={fullName}
-            onChangeText={(text) => {
-              setFullName(text);
-              if (errors.fullName) {
-                setErrors({...errors, fullName: ''});
-              }
-            }}
-            editable={isEditing}
-          />
-          {errors.fullName ? (
-            <Text style={styles.errorText}>{errors.fullName}</Text>
-          ) : null}
-        </View>
-
-        {/* Email Field (Read-only) */}
-        <View style={styles.formGroup}>
-          <Text style={[styles.label, { color: Colors.light.text }]}>Email</Text>
-          <TextInput
-            style={[
-              styles.input,
-              styles.readOnlyInput,
-              { 
-                color: Colors.light.tabIconDefault,
-                backgroundColor: Colors.light.secondary,
-                borderColor: '#EEEEEE',
-              }
+              styles.fieldInput,
+              { color: Colors.light.tabIconDefault, backgroundColor: Colors.light.secondary }
             ]}
             value={email}
             editable={false}
           />
         </View>
-
-        {/* State Selection */}
-        <View style={styles.formGroup}>
-          <Text style={[styles.label, { color: Colors.light.text }]}>State</Text>
-          <View 
+        
+        {/* Full Name */}
+        <View style={styles.fieldContainer}>
+          <Text style={[styles.fieldLabel, { color: Colors.light.tabIconDefault }]}>
+            Full Name
+          </Text>
+          <TextInput
             style={[
-              styles.pickerContainer, 
+              styles.fieldInput,
               { 
-                backgroundColor: Colors.light.secondary,
-                borderColor: errors.state ? Colors.light.error : isEditing ? Colors.light.accent : '#EEEEEE',
+                color: Colors.light.text, 
+                backgroundColor: isEditing ? Colors.light.secondary : 'transparent',
+                borderColor: isEditing ? Colors.light.tabIconDefault : 'transparent',
+                borderWidth: isEditing ? 1 : 0,
               }
             ]}
-          >
-            <Picker
-              selectedValue={state}
-              onValueChange={(itemValue: string) => {
-                setState(itemValue);
-                if (errors.state) {
-                  setErrors({...errors, state: ''});
-                }
-              }}
-              enabled={isEditing}
-              style={[
-                styles.picker, 
-                { color: Colors.light.text }
-              ]}
-              dropdownIconColor={Colors.light.text}
-            >
-              {STATES.map((stateName) => (
-                <Picker.Item key={stateName} label={stateName} value={stateName} />
-              ))}
-            </Picker>
-          </View>
-          {errors.state ? (
-            <Text style={styles.errorText}>{errors.state}</Text>
-          ) : null}
+            value={fullName}
+            onChangeText={setFullName}
+            editable={isEditing}
+            placeholder="Enter your full name"
+            placeholderTextColor={Colors.light.tabIconDefault}
+          />
+          {errors.fullName && (
+            <Text style={[styles.errorText, { color: Colors.light.danger }]}>
+              {errors.fullName}
+            </Text>
+          )}
         </View>
         
-        {isProfileLoading && (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="small" color={Colors.light.accent} />
-            <Text style={styles.loadingText}>Updating profile...</Text>
-          </View>
-        )}
+        {/* State */}
+        <View style={styles.fieldContainer}>
+          <Text style={[styles.fieldLabel, { color: Colors.light.tabIconDefault }]}>
+            State
+          </Text>
+          {isEditing ? (
+            <View style={[
+              styles.pickerContainer, 
+              { backgroundColor: Colors.light.secondary, borderColor: Colors.light.tabIconDefault, borderWidth: 1 }
+            ]}>
+              <Picker
+                selectedValue={state}
+                onValueChange={(itemValue: string) => setState(itemValue)}
+                enabled={isEditing}
+                style={[styles.picker, { color: Colors.light.text }]}
+              >
+                {STATES.map((stateName) => (
+                  <Picker.Item key={stateName} label={stateName} value={stateName} />
+                ))}
+              </Picker>
+            </View>
+          ) : (
+            <TextInput
+              style={[
+                styles.fieldInput,
+                { color: Colors.light.text, backgroundColor: 'transparent' }
+              ]}
+              value={state}
+              editable={false}
+            />
+          )}
+          {errors.state && (
+            <Text style={[styles.errorText, { color: Colors.light.danger }]}>
+              {errors.state}
+            </Text>
+          )}
+        </View>
       </View>
-
+      
       {/* Password Section */}
-      <View style={styles.formSection}>
+      <View style={styles.sectionContainer}>
         <Text style={[styles.sectionTitle, { color: Colors.light.text }]}>
           Change Password
         </Text>
-
+        
         {/* Current Password */}
-        <View style={styles.formGroup}>
-          <Text style={[styles.label, { color: Colors.light.text }]}>Current Password</Text>
-          <View style={styles.passwordContainer}>
+        <View style={styles.fieldContainer}>
+          <Text style={[styles.fieldLabel, { color: Colors.light.tabIconDefault }]}>
+            Current Password
+          </Text>
+          <View style={styles.passwordInputContainer}>
             <TextInput
               style={[
-                styles.input,
-                styles.passwordInput,
-                { 
-                  color: Colors.light.text,
-                  backgroundColor: Colors.light.secondary,
-                  borderColor: errors.currentPassword ? Colors.light.error : '#EEEEEE',
-                }
+                styles.fieldInput,
+                { color: Colors.light.text, backgroundColor: Colors.light.secondary, borderColor: Colors.light.tabIconDefault, borderWidth: 1 }
               ]}
               value={currentPassword}
-              onChangeText={(text) => {
-                setCurrentPassword(text);
-                if (errors.currentPassword) {
-                  setErrors({...errors, currentPassword: ''});
-                }
-              }}
+              onChangeText={setCurrentPassword}
               secureTextEntry={!passwordVisible}
               placeholder="Enter current password"
               placeholderTextColor={Colors.light.tabIconDefault}
             />
             <TouchableOpacity
-              style={styles.passwordVisibility}
+              style={styles.passwordVisibilityToggle}
               onPress={() => setPasswordVisible(!passwordVisible)}
             >
               <Ionicons
-                name={passwordVisible ? 'eye-off' : 'eye'}
+                name={passwordVisible ? 'eye-off-outline' : 'eye-outline'}
                 size={22}
                 color={Colors.light.tabIconDefault}
               />
             </TouchableOpacity>
           </View>
-          {errors.currentPassword ? (
-            <Text style={styles.errorText}>{errors.currentPassword}</Text>
-          ) : null}
+          {errors.currentPassword && (
+            <Text style={[styles.errorText, { color: Colors.light.danger }]}>
+              {errors.currentPassword}
+            </Text>
+          )}
         </View>
-
+        
         {/* New Password */}
-        <View style={styles.formGroup}>
-          <Text style={[styles.label, { color: Colors.light.text }]}>New Password</Text>
+        <View style={styles.fieldContainer}>
+          <Text style={[styles.fieldLabel, { color: Colors.light.tabIconDefault }]}>
+            New Password
+          </Text>
           <TextInput
             style={[
-              styles.input,
-              { 
-                color: Colors.light.text,
-                backgroundColor: Colors.light.secondary,
-                borderColor: errors.newPassword ? Colors.light.error : '#EEEEEE',
-              }
+              styles.fieldInput,
+              { color: Colors.light.text, backgroundColor: Colors.light.secondary, borderColor: Colors.light.tabIconDefault, borderWidth: 1 }
             ]}
             value={newPassword}
-            onChangeText={(text) => {
-              setNewPassword(text);
-              if (errors.newPassword) {
-                setErrors({...errors, newPassword: ''});
-              }
-            }}
+            onChangeText={setNewPassword}
             secureTextEntry={!passwordVisible}
             placeholder="Enter new password"
             placeholderTextColor={Colors.light.tabIconDefault}
           />
-          {errors.newPassword ? (
-            <Text style={styles.errorText}>{errors.newPassword}</Text>
-          ) : null}
+          {errors.newPassword && (
+            <Text style={[styles.errorText, { color: Colors.light.danger }]}>
+              {errors.newPassword}
+            </Text>
+          )}
         </View>
-
+        
         {/* Confirm New Password */}
-        <View style={styles.formGroup}>
-          <Text style={[styles.label, { color: Colors.light.text }]}>Confirm New Password</Text>
+        <View style={styles.fieldContainer}>
+          <Text style={[styles.fieldLabel, { color: Colors.light.tabIconDefault }]}>
+            Confirm New Password
+          </Text>
           <TextInput
             style={[
-              styles.input,
-              { 
-                color: Colors.light.text,
-                backgroundColor: Colors.light.secondary,
-                borderColor: errors.confirmPassword ? Colors.light.error : '#EEEEEE',
-              }
+              styles.fieldInput,
+              { color: Colors.light.text, backgroundColor: Colors.light.secondary, borderColor: Colors.light.tabIconDefault, borderWidth: 1 }
             ]}
             value={confirmPassword}
-            onChangeText={(text) => {
-              setConfirmPassword(text);
-              if (errors.confirmPassword) {
-                setErrors({...errors, confirmPassword: ''});
-              }
-            }}
+            onChangeText={setConfirmPassword}
             secureTextEntry={!passwordVisible}
             placeholder="Confirm new password"
             placeholderTextColor={Colors.light.tabIconDefault}
           />
-          {errors.confirmPassword ? (
-            <Text style={styles.errorText}>{errors.confirmPassword}</Text>
-          ) : null}
+          {errors.confirmPassword && (
+            <Text style={[styles.errorText, { color: Colors.light.danger }]}>
+              {errors.confirmPassword}
+            </Text>
+          )}
         </View>
-
+        
+        {/* Update Password Button */}
         <TouchableOpacity
           style={[
-            styles.updatePasswordButton,
+            styles.updateButton,
             { backgroundColor: Colors.light.accent },
-            isPasswordLoading && styles.disabledButton
+            isPasswordLoading && styles.updateButtonDisabled
           ]}
           onPress={handlePasswordChange}
           disabled={isPasswordLoading}
         >
-          {isPasswordLoading ? (
-            <View style={styles.buttonLoadingContainer}>
-              <ActivityIndicator size="small" color="#FFFFFF" />
-              <Text style={styles.updatePasswordButtonText}>Updating...</Text>
-            </View>
-          ) : (
-            <Text style={styles.updatePasswordButtonText}>
-              Update Password
-            </Text>
-          )}
+          <Text style={styles.updateButtonText}>
+            {isPasswordLoading ? 'Updating...' : 'Update Password'}
+          </Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -460,50 +469,52 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    padding: 16,
+    padding: 20,
   },
   profileImageContainer: {
     alignItems: 'center',
-    marginVertical: 20,
+    marginBottom: 24,
+    position: 'relative',
   },
   profileImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
   },
-  defaultProfileImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    alignItems: 'center',
+  profileImagePlaceholder: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
     justifyContent: 'center',
+    alignItems: 'center',
   },
-  profileInitials: {
-    fontSize: 36,
-    fontWeight: 'bold',
-  },
-  editBadge: {
+  changeImageButton: {
     position: 'absolute',
     bottom: 0,
-    right: 0,
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    alignItems: 'center',
+    right: '35%',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: 'white',
+    alignItems: 'center',
   },
-  formSection: {
+  sectionContainer: {
     marginBottom: 24,
-    backgroundColor: 'transparent',
+    backgroundColor: 'white',
     borderRadius: 12,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  sectionHeader: {
+  sectionHeaderContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 16,
+    borderBottomColor: Colors.light.tabIconDefault,
   },
   sectionTitle: {
     fontSize: 18,
@@ -511,80 +522,77 @@ const styles = StyleSheet.create({
   },
   editButton: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '500',
   },
-  formGroup: {
+  fieldContainer: {
     marginBottom: 16,
   },
-  label: {
+  fieldLabel: {
     fontSize: 14,
-    marginBottom: 6,
+    marginBottom: 8,
   },
-  input: {
-    height: 50,
-    borderWidth: 1,
+  fieldInput: {
+    height: 48,
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'transparent',
     paddingHorizontal: 12,
     fontSize: 16,
   },
-  readOnlyInput: {
-    opacity: 0.7,
-  },
-  pickerContainer: {
-    borderWidth: 1,
-    borderRadius: 8,
-    height: 50,
-    justifyContent: 'center',
-  },
-  picker: {
-    height: 50,
-    width: '100%',
-  },
-  passwordContainer: {
+  passwordInputContainer: {
     position: 'relative',
   },
-  passwordInput: {
-    paddingRight: 50, // Space for the visibility toggle
-  },
-  passwordVisibility: {
+  passwordVisibilityToggle: {
     position: 'absolute',
     right: 12,
     top: 12,
   },
-  updatePasswordButton: {
-    height: 50,
-    borderRadius: 25,
+  pickerContainer: {
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  picker: {
+    height: 48,
+  },
+  updateButton: {
+    height: 48,
+    borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 8,
   },
-  updatePasswordButtonText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
+  updateButtonDisabled: {
+    opacity: 0.7,
+  },
+  updateButtonText: {
+    color: 'white',
     fontSize: 16,
+    fontWeight: '600',
   },
   errorText: {
-    color: Colors.light.error,
     fontSize: 12,
     marginTop: 4,
   },
-  loadingContainer: {
+  centeredContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 10,
+    marginBottom: 24,
   },
-  loadingText: {
-    color: Colors.light.accent,
+  logoutButtonText: {
+    fontSize: 16,
+    fontWeight: '500',
     marginLeft: 8,
-    fontSize: 14,
   },
-  disabledButton: {
-    opacity: 0.7,
-  },
-  buttonLoadingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+  apiErrorContainer: {
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 16,
+    alignItems: 'center'
   },
 }); 
