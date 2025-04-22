@@ -2,14 +2,16 @@ import { Drawer } from 'expo-router/drawer';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
-import { Alert, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { DrawerContentScrollView, DrawerItemList } from '@react-navigation/drawer';
+import { Alert, Image, StyleSheet, Text, TouchableOpacity, View, Dimensions } from 'react-native';
+import { DrawerContentScrollView, DrawerItemList, createDrawerNavigator } from '@react-navigation/drawer';
 import { router } from 'expo-router';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function AppLayout() {
   // useColorScheme will always return 'light'
   const drawerTheme = Colors.light;
+  const insets = useSafeAreaInsets();
   
   const handleLogout = () => {
     // In a real app, this would clear user session/tokens from secure storage
@@ -32,7 +34,7 @@ export default function AppLayout() {
         }}
       >
         {/* Header with logo/user info */}
-        <View style={styles.drawerHeader}>
+        <View style={[styles.drawerHeader, { paddingTop: insets.top > 0 ? insets.top : 20 }]}>
           <Image 
             source={require('@/assets/images/spediak-logo.png')} 
             style={styles.drawerLogo}
@@ -50,7 +52,7 @@ export default function AppLayout() {
         <DrawerItemList {...props} />
         
         {/* Custom logout item at bottom */}
-        <View style={styles.logoutContainer}>
+        <View style={[styles.logoutContainer, { paddingBottom: insets.bottom > 0 ? insets.bottom : 20 }]}>
           <TouchableOpacity 
             style={styles.logoutButton}
             onPress={() => {
@@ -81,12 +83,18 @@ export default function AppLayout() {
     );
   }
 
+  // Get the screen width for responsive drawer width
+  const screenWidth = Dimensions.get('window').width;
+  const drawerWidth = Math.min(screenWidth * 0.8, 300); // 80% of screen width, max 300px
+
   return (
     <Drawer
       drawerContent={(props) => <CustomDrawerContent {...props} />}
       screenOptions={{
         headerStyle: {
           backgroundColor: drawerTheme.background,
+          elevation: 0, // Remove shadow on Android
+          shadowOpacity: 0, // Remove shadow on iOS
         },
         headerTintColor: drawerTheme.text,
         headerTitleStyle: {
@@ -99,6 +107,15 @@ export default function AppLayout() {
           marginLeft: -20,
           fontSize: 16,
         },
+        drawerStyle: {
+          width: drawerWidth,
+          backgroundColor: drawerTheme.background,
+        },
+        // Enhanced animation for drawer
+        drawerType: 'slide',
+        overlayColor: 'rgba(0,0,0,0.5)',
+        swipeEdgeWidth: 50, // Increase the area where swipe begins
+        swipeMinDistance: 20, // Make it easier to open with swipe
       }}
     >
       <Drawer.Screen

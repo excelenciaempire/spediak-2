@@ -1,11 +1,27 @@
-import React, { useState, useLayoutEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, TextInput, ActivityIndicator, Modal, ScrollView, Alert } from 'react-native';
+import React, { useState, useLayoutEffect, useRef } from 'react';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  TouchableOpacity, 
+  Image, 
+  TextInput, 
+  ActivityIndicator, 
+  Modal, 
+  ScrollView, 
+  Alert,
+  Animated,
+  Easing
+} from 'react-native';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { Colors } from '@/constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useNavigation } from '@react-navigation/native';
 import DrawerButton from '@/components/DrawerButton';
+import { useAuth } from '@/context/AuthContext';
+import { inspectionApi } from '@/services/api';
+import * as Clipboard from 'expo-clipboard';
 // Note: expo-speech-recognition might not be directly available
 // In a real implementation, you would use expo-speech or a similar package
 // For this example, we'll mock the interface
@@ -38,6 +54,7 @@ export default function NewInspectionScreen() {
   // Will always be 'light'
   const colorScheme = useColorScheme();
   const navigation = useNavigation();
+  const { user, token } = useAuth();
   
   // Set up the drawer menu button in the header
   useLayoutEffect(() => {
@@ -46,76 +63,112 @@ export default function NewInspectionScreen() {
     });
   }, [navigation]);
   
+  // Animation refs
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(50)).current;
+  
+  // Start animations when the component mounts
+  useLayoutEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.cubic)
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 800,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.cubic)
+      })
+    ]).start();
+  }, [fadeAnim, slideAnim]);
+  
   const [image, setImage] = useState<string | null>(null);
   const [description, setDescription] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [ddidResponse, setDdidResponse] = useState<string | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [copiedToClipboard, setCopiedToClipboard] = useState(false);
 
   // Check if either image or description is missing
   const isGenerateDisabled = !image || !description;
 
   const pickImage = async () => {
-    // No permissions request is necessary for launching the image library
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 1,
-    });
+    try {
+      // No permissions request is necessary for launching the image library
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 1,
+      });
 
-    if (!result.canceled) {
-      // Check file size (approximate calculation, can be refined)
-      // const imgInfo = await Image.resolveAssetSource({uri: result.assets[0].uri});
-      const fileSize = result.assets[0].fileSize || 0;
-      
-      // Check if file size is greater than 5MB (5 * 1024 * 1024 bytes)
-      if (fileSize > 5 * 1024 * 1024) {
-        Alert.alert(
-          'File Too Large',
-          'Please select an image smaller than 5MB',
-          [{ text: 'OK' }]
-        );
-        return;
+      if (!result.canceled) {
+        // Check file size (approximate calculation, can be refined)
+        const fileSize = result.assets[0].fileSize || 0;
+        
+        // Check if file size is greater than 5MB (5 * 1024 * 1024 bytes)
+        if (fileSize > 5 * 1024 * 1024) {
+          Alert.alert(
+            'File Too Large',
+            'Please select an image smaller than 5MB',
+            [{ text: 'OK' }]
+          );
+          return;
+        }
+        
+        setImage(result.assets[0].uri);
       }
-      
-      setImage(result.assets[0].uri);
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to select image. Please try again.');
     }
   };
 
   const takePhoto = async () => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    
-    if (status !== 'granted') {
-      Alert.alert(
-        'Permission Required',
-        'Camera permission is required to take photos',
-        [{ text: 'OK' }]
-      );
-      return;
-    }
-
-    const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 1,
-    });
-
-    if (!result.canceled) {
-      const fileSize = result.assets[0].fileSize || 0;
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
       
-      // Check if file size is greater than 5MB
-      if (fileSize > 5 * 1024 * 1024) {
+      if (status !== 'granted') {
         Alert.alert(
-          'File Too Large',
-          'Image size exceeds 5MB limit. Please try again with a smaller image.',
+          'Permission Required',
+          'Camera permission is required to take photos',
           [{ text: 'OK' }]
         );
         return;
       }
-      
-      setImage(result.assets[0].uri);
+
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 1,
+      });
+
+      if (!result.canceled) {
+        const fileSize = result.assets[0].fileSize || 0;
+        
+        // Check if file size is greater than 5MB
+        if (fileSize > 5 * 1024 * 1024) {
+          Alert.alert(
+            'File Too Large',
+            'Image size exceeds 5MB limit. Please try again with a smaller image.',
+            [{ text: 'OK' }]
+          );
+          return;
+        }
+        
+        setImage(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error taking photo:', error);
+      Alert.alert('Error', 'Failed to take photo. Please try again.');
     }
   };
 
@@ -162,30 +215,83 @@ export default function NewInspectionScreen() {
   };
 
   const handleGenerateDDID = async () => {
-    if (isGenerateDisabled) return;
+    if (!image) {
+      setError('Please select an image first');
+      return;
+    }
 
-    setIsLoading(true);
+    if (!description) {
+      setError('Please provide a description');
+      return;
+    }
 
+    if (!user || !token) {
+      setError('You must be logged in to generate a DDID report');
+      return;
+    }
+
+    setError(null);
+    setLoading(true);
+    
     try {
-      // In a real app, this would make an API call to the backend
-      // For demonstration, we'll simulate an API call
-      setTimeout(() => {
-        const mockResponse = `DDID Statement: The inspector observed water damage on the ceiling below the upstairs bathroom. This is a defect because it indicates a water leak from the plumbing or the shower/tub enclosure above. The moisture can lead to structural damage, mold growth, and deterioration of building materials if not addressed. 
-
-The inspector recommends having a licensed plumber evaluate the source of the leak and make necessary repairs. Additionally, once the leak is fixed, the affected ceiling material should be replaced or repaired by a qualified contractor.`;
-        
-        setDdidResponse(mockResponse);
-        setIsLoading(false);
-        setModalVisible(true);
-      }, 2000);
-    } catch (error) {
-      console.error('Error generating DDID:', error);
-      setIsLoading(false);
-      Alert.alert(
-        'Error',
-        'There was a problem generating the DDID response. Please check your connection and try again.',
-        [{ text: 'Try Again' }]
+      const response = await inspectionApi.generateDDID(
+        image,
+        description,
+        user.id,
+        token
       );
+      
+      if (!response.success || !response.data) {
+        throw new Error(response.message || 'Failed to generate DDID');
+      }
+      
+      setDdidResponse(response.data.ddidResponse);
+      setModalVisible(true);
+    } catch (error: any) {
+      console.error('Error generating DDID:', error);
+      setError(error.message || 'An error occurred while generating the DDID report');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveInspection = async () => {
+    if (!ddidResponse || !image || !description || !user?.id || !token) {
+      setError('Missing required information to save inspection');
+      return;
+    }
+
+    setIsSaving(true);
+    setSaveSuccess(false);
+    
+    try {
+      const response = await inspectionApi.saveInspection(
+        user.id,
+        image,
+        description,
+        ddidResponse,
+        token
+      );
+      
+      if (!response.success) {
+        throw new Error(response.message || 'Failed to save inspection');
+      }
+      
+      setSaveSuccess(true);
+      
+      // Reset form after successful save
+      setTimeout(() => {
+        setModalVisible(false);
+        setImage(null);
+        setDescription('');
+        setDdidResponse(null);
+        setSaveSuccess(false);
+      }, 1500);
+    } catch (error: any) {
+      console.error('Error saving inspection:', error);
+      setError(error.message || 'An error occurred while saving the inspection');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -205,6 +311,7 @@ The inspector recommends having a licensed plumber evaluate the source of the le
               setImage(null);
               setDescription('');
               setDdidResponse(null);
+              setError(null);
             },
             style: 'destructive',
           },
@@ -214,15 +321,37 @@ The inspector recommends having a licensed plumber evaluate the source of the le
     }
   };
 
-  const copyToClipboard = () => {
-    // In a real app, this would use Clipboard.setStringAsync(ddidResponse)
-    Alert.alert('Copied', 'DDID response copied to clipboard');
-    setModalVisible(false);
+  const copyToClipboard = async () => {
+    if (ddidResponse) {
+      try {
+        await Clipboard.setStringAsync(ddidResponse);
+        setCopiedToClipboard(true);
+        setTimeout(() => setCopiedToClipboard(false), 2000);
+      } catch (error) {
+        console.error('Failed to copy to clipboard:', error);
+        Alert.alert('Error', 'Failed to copy to clipboard');
+      }
+    }
   };
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: Colors.light.background }]}>
-      <View style={styles.content}>
+      <Animated.View 
+        style={[
+          styles.content, 
+          { 
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }]
+          }
+        ]}
+      >
+        {/* Error message if any */}
+        {error && (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        )}
+
         {/* Image Upload Area */}
         <TouchableOpacity
           style={[styles.imageUploadArea, !image && styles.imageUploadAreaEmpty]}
@@ -311,7 +440,7 @@ The inspector recommends having a licensed plumber evaluate the source of the le
             New Inspection
           </Text>
         </TouchableOpacity>
-      </View>
+      </Animated.View>
 
       {/* DDID Response Modal */}
       <Modal
@@ -326,16 +455,48 @@ The inspector recommends having a licensed plumber evaluate the source of the le
               <TouchableOpacity onPress={() => setModalVisible(false)}>
                 <Ionicons name="close" size={24} color={Colors.light.text} />
               </TouchableOpacity>
-              <Text style={[styles.modalTitle, { color: Colors.light.text }]}>DDID Response</Text>
+              <Text style={[styles.modalTitle, { color: Colors.light.text }]}>
+                DDID Response
+              </Text>
               <TouchableOpacity onPress={copyToClipboard}>
-                <Ionicons name="copy-outline" size={24} color={Colors.light.accent} />
+                <Ionicons 
+                  name={copiedToClipboard ? "checkmark-circle" : "copy-outline"} 
+                  size={24} 
+                  color={copiedToClipboard ? "green" : Colors.light.accent} 
+                />
               </TouchableOpacity>
             </View>
+
             <ScrollView style={styles.modalBody}>
-              <Text style={[styles.ddidText, { color: Colors.light.text }]}>
+              <Text style={[styles.ddidResponseText, { color: Colors.light.text }]}>
                 {ddidResponse}
               </Text>
             </ScrollView>
+
+            <View style={styles.modalFooter}>
+              {saveSuccess ? (
+                <View style={styles.saveSuccessContainer}>
+                  <Ionicons name="checkmark-circle" size={24} color="green" />
+                  <Text style={styles.saveSuccessText}>Inspection saved successfully!</Text>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={[
+                    styles.saveButton,
+                    { backgroundColor: Colors.light.accent },
+                    isSaving && styles.disabledButton
+                  ]}
+                  onPress={handleSaveInspection}
+                  disabled={isSaving}
+                >
+                  {isSaving ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={styles.saveButtonText}>Save Inspection</Text>
+                  )}
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         </View>
       </Modal>
@@ -350,6 +511,19 @@ const styles = StyleSheet.create({
   content: {
     padding: 16,
     alignItems: 'center',
+  },
+  errorContainer: {
+    backgroundColor: '#FFEDEE',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+    width: '100%',
+    borderLeftWidth: 4,
+    borderLeftColor: Colors.light.error,
+  },
+  errorText: {
+    color: Colors.light.error,
+    fontSize: 14,
   },
   imageUploadArea: {
     width: '100%',
@@ -441,7 +615,7 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     width: '100%',
-    maxHeight: '80%',
+    maxHeight: '90%',
     borderRadius: 16,
     padding: 16,
     shadowColor: '#000',
@@ -455,7 +629,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 16,
-    paddingBottom: 16,
+    paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#EEEEEE',
   },
@@ -464,10 +638,39 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   modalBody: {
-    maxHeight: '90%',
+    maxHeight: '70%',
   },
-  ddidText: {
+  ddidResponseText: {
     fontSize: 16,
     lineHeight: 24,
+  },
+  modalFooter: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#EEEEEE',
+  },
+  saveButton: {
+    borderRadius: 8,
+    padding: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  saveButtonText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  saveSuccessContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+  },
+  saveSuccessText: {
+    color: 'green',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
   },
 }); 

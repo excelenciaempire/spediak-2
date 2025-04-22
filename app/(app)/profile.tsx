@@ -1,5 +1,5 @@
 import React, { useState, useLayoutEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Image, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Image, Alert, ActivityIndicator } from 'react-native';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { Colors } from '@/constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,8 +12,22 @@ const MOCK_USER = {
   fullName: 'John Smith',
   email: 'john.smith@example.com',
   state: 'North Carolina',
-  profileImageUrl: null, // Default is null, can be a URL
+  profileImageUrl: undefined, // Changed from null to undefined
 };
+
+// List of states for the picker
+const STATES = [
+  'Alabama', 'Alaska', 'Arizona', 'Arkansas', 'California', 
+  'Colorado', 'Connecticut', 'Delaware', 'Florida', 'Georgia', 
+  'Hawaii', 'Idaho', 'Illinois', 'Indiana', 'Iowa', 
+  'Kansas', 'Kentucky', 'Louisiana', 'Maine', 'Maryland', 
+  'Massachusetts', 'Michigan', 'Minnesota', 'Mississippi', 'Missouri', 
+  'Montana', 'Nebraska', 'Nevada', 'New Hampshire', 'New Jersey', 
+  'New Mexico', 'New York', 'North Carolina', 'North Dakota', 'Ohio', 
+  'Oklahoma', 'Oregon', 'Pennsylvania', 'Rhode Island', 'South Carolina', 
+  'South Dakota', 'Tennessee', 'Texas', 'Utah', 'Vermont', 
+  'Virginia', 'Washington', 'West Virginia', 'Wisconsin', 'Wyoming'
+];
 
 export default function ProfileSettingsScreen() {
   // Will always return 'light'
@@ -25,9 +39,16 @@ export default function ProfileSettingsScreen() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [state, setState] = useState(MOCK_USER.state);
-  const [profileImageUrl, setProfileImageUrl] = useState<string | null>(MOCK_USER.profileImageUrl);
+  const [profileImageUrl, setProfileImageUrl] = useState<string | undefined>(MOCK_USER.profileImageUrl);
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  
+  // Add validation state
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  
+  // Add loading states
+  const [isProfileLoading, setIsProfileLoading] = useState(false);
+  const [isPasswordLoading, setIsPasswordLoading] = useState(false);
 
   // Set up the drawer menu button in the header
   useLayoutEffect(() => {
@@ -36,36 +57,90 @@ export default function ProfileSettingsScreen() {
     });
   }, [navigation]);
 
-  const handlePasswordChange = () => {
-    // Validate password fields
+  const validatePassword = () => {
+    const newErrors: Record<string, string> = {};
+    
     if (!currentPassword) {
-      Alert.alert('Error', 'Please enter your current password');
-      return;
+      newErrors.currentPassword = 'Current password is required';
     }
 
     if (!newPassword) {
-      Alert.alert('Error', 'Please enter a new password');
-      return;
+      newErrors.newPassword = 'New password is required';
+    } else if (newPassword.length < 8) {
+      newErrors.newPassword = 'Password must be at least 8 characters';
     }
 
     if (newPassword !== confirmPassword) {
-      Alert.alert('Error', 'New passwords do not match');
+      newErrors.confirmPassword = 'Passwords do not match';
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const validateProfile = () => {
+    const newErrors: Record<string, string> = {};
+    
+    if (!fullName) {
+      newErrors.fullName = 'Full name is required';
+    } else if (fullName.length < 3) {
+      newErrors.fullName = 'Full name must be at least 3 characters';
+    }
+    
+    if (!state) {
+      newErrors.state = 'Please select a state';
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handlePasswordChange = async () => {
+    if (!validatePassword()) {
       return;
     }
 
-    // In a real app, this would call an API to update the password
-    Alert.alert('Success', 'Password updated successfully');
+    setIsPasswordLoading(true);
     
-    // Clear password fields
-    setCurrentPassword('');
-    setNewPassword('');
-    setConfirmPassword('');
+    try {
+      // Simulate API call with a delay
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // In a real app, this would call an API to update the password
+      Alert.alert('Success', 'Password updated successfully');
+      
+      // Clear password fields
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setErrors({});
+    } catch (error) {
+      Alert.alert('Error', 'Failed to update password. Please try again.');
+    } finally {
+      setIsPasswordLoading(false);
+    }
   };
 
-  const handleSaveProfile = () => {
-    // In a real app, this would call an API to update the profile
-    Alert.alert('Success', 'Profile updated successfully');
-    setIsEditing(false);
+  const handleSaveProfile = async () => {
+    if (!validateProfile()) {
+      return;
+    }
+    
+    setIsProfileLoading(true);
+    
+    try {
+      // Simulate API call with a delay
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // In a real app, this would call an API to update the profile
+      Alert.alert('Success', 'Profile updated successfully');
+      setIsEditing(false);
+      setErrors({});
+    } catch (error) {
+      Alert.alert('Error', 'Failed to update profile. Please try again.');
+    } finally {
+      setIsProfileLoading(false);
+    }
   };
 
   const toggleEdit = () => {
@@ -107,7 +182,7 @@ export default function ProfileSettingsScreen() {
           text: 'Remove Photo', 
           onPress: () => {
             console.log('Remove Photo pressed');
-            setProfileImageUrl(null);
+            setProfileImageUrl(undefined);
           },
           style: 'destructive'
         },
@@ -153,9 +228,12 @@ export default function ProfileSettingsScreen() {
           <Text style={[styles.sectionTitle, { color: Colors.light.text }]}>
             Personal Information
           </Text>
-          <TouchableOpacity onPress={toggleEdit}>
+          <TouchableOpacity 
+            onPress={toggleEdit}
+            disabled={isProfileLoading}
+          >
             <Text style={[styles.editButton, { color: Colors.light.accent }]}>
-              {isEditing ? 'Save' : 'Edit'}
+              {isEditing ? (isProfileLoading ? 'Saving...' : 'Save') : 'Edit'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -169,13 +247,21 @@ export default function ProfileSettingsScreen() {
               { 
                 color: Colors.light.text,
                 backgroundColor: Colors.light.secondary,
-                borderColor: isEditing ? Colors.light.accent : '#EEEEEE',
+                borderColor: errors.fullName ? Colors.light.error : isEditing ? Colors.light.accent : '#EEEEEE',
               }
             ]}
             value={fullName}
-            onChangeText={setFullName}
+            onChangeText={(text) => {
+              setFullName(text);
+              if (errors.fullName) {
+                setErrors({...errors, fullName: ''});
+              }
+            }}
             editable={isEditing}
           />
+          {errors.fullName ? (
+            <Text style={styles.errorText}>{errors.fullName}</Text>
+          ) : null}
         </View>
 
         {/* Email Field (Read-only) */}
@@ -204,13 +290,18 @@ export default function ProfileSettingsScreen() {
               styles.pickerContainer, 
               { 
                 backgroundColor: Colors.light.secondary,
-                borderColor: isEditing ? Colors.light.accent : '#EEEEEE',
+                borderColor: errors.state ? Colors.light.error : isEditing ? Colors.light.accent : '#EEEEEE',
               }
             ]}
           >
             <Picker
               selectedValue={state}
-              onValueChange={(itemValue: string) => setState(itemValue)}
+              onValueChange={(itemValue: string) => {
+                setState(itemValue);
+                if (errors.state) {
+                  setErrors({...errors, state: ''});
+                }
+              }}
               enabled={isEditing}
               style={[
                 styles.picker, 
@@ -218,11 +309,22 @@ export default function ProfileSettingsScreen() {
               ]}
               dropdownIconColor={Colors.light.text}
             >
-              <Picker.Item label="North Carolina" value="North Carolina" />
-              <Picker.Item label="South Carolina" value="South Carolina" />
+              {STATES.map((stateName) => (
+                <Picker.Item key={stateName} label={stateName} value={stateName} />
+              ))}
             </Picker>
           </View>
+          {errors.state ? (
+            <Text style={styles.errorText}>{errors.state}</Text>
+          ) : null}
         </View>
+        
+        {isProfileLoading && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="small" color={Colors.light.accent} />
+            <Text style={styles.loadingText}>Updating profile...</Text>
+          </View>
+        )}
       </View>
 
       {/* Password Section */}
@@ -242,11 +344,16 @@ export default function ProfileSettingsScreen() {
                 { 
                   color: Colors.light.text,
                   backgroundColor: Colors.light.secondary,
-                  borderColor: '#EEEEEE',
+                  borderColor: errors.currentPassword ? Colors.light.error : '#EEEEEE',
                 }
               ]}
               value={currentPassword}
-              onChangeText={setCurrentPassword}
+              onChangeText={(text) => {
+                setCurrentPassword(text);
+                if (errors.currentPassword) {
+                  setErrors({...errors, currentPassword: ''});
+                }
+              }}
               secureTextEntry={!passwordVisible}
               placeholder="Enter current password"
               placeholderTextColor={Colors.light.tabIconDefault}
@@ -262,6 +369,9 @@ export default function ProfileSettingsScreen() {
               />
             </TouchableOpacity>
           </View>
+          {errors.currentPassword ? (
+            <Text style={styles.errorText}>{errors.currentPassword}</Text>
+          ) : null}
         </View>
 
         {/* New Password */}
@@ -273,15 +383,23 @@ export default function ProfileSettingsScreen() {
               { 
                 color: Colors.light.text,
                 backgroundColor: Colors.light.secondary,
-                borderColor: '#EEEEEE',
+                borderColor: errors.newPassword ? Colors.light.error : '#EEEEEE',
               }
             ]}
             value={newPassword}
-            onChangeText={setNewPassword}
+            onChangeText={(text) => {
+              setNewPassword(text);
+              if (errors.newPassword) {
+                setErrors({...errors, newPassword: ''});
+              }
+            }}
             secureTextEntry={!passwordVisible}
             placeholder="Enter new password"
             placeholderTextColor={Colors.light.tabIconDefault}
           />
+          {errors.newPassword ? (
+            <Text style={styles.errorText}>{errors.newPassword}</Text>
+          ) : null}
         </View>
 
         {/* Confirm New Password */}
@@ -293,27 +411,44 @@ export default function ProfileSettingsScreen() {
               { 
                 color: Colors.light.text,
                 backgroundColor: Colors.light.secondary,
-                borderColor: '#EEEEEE',
+                borderColor: errors.confirmPassword ? Colors.light.error : '#EEEEEE',
               }
             ]}
             value={confirmPassword}
-            onChangeText={setConfirmPassword}
+            onChangeText={(text) => {
+              setConfirmPassword(text);
+              if (errors.confirmPassword) {
+                setErrors({...errors, confirmPassword: ''});
+              }
+            }}
             secureTextEntry={!passwordVisible}
             placeholder="Confirm new password"
             placeholderTextColor={Colors.light.tabIconDefault}
           />
+          {errors.confirmPassword ? (
+            <Text style={styles.errorText}>{errors.confirmPassword}</Text>
+          ) : null}
         </View>
 
         <TouchableOpacity
           style={[
             styles.updatePasswordButton,
-            { backgroundColor: Colors.light.accent }
+            { backgroundColor: Colors.light.accent },
+            isPasswordLoading && styles.disabledButton
           ]}
           onPress={handlePasswordChange}
+          disabled={isPasswordLoading}
         >
-          <Text style={styles.updatePasswordButtonText}>
-            Update Password
-          </Text>
+          {isPasswordLoading ? (
+            <View style={styles.buttonLoadingContainer}>
+              <ActivityIndicator size="small" color="#FFFFFF" />
+              <Text style={styles.updatePasswordButtonText}>Updating...</Text>
+            </View>
+          ) : (
+            <Text style={styles.updatePasswordButtonText}>
+              Update Password
+            </Text>
+          )}
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -427,5 +562,29 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: 'bold',
     fontSize: 16,
+  },
+  errorText: {
+    color: Colors.light.error,
+    fontSize: 12,
+    marginTop: 4,
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 10,
+  },
+  loadingText: {
+    color: Colors.light.accent,
+    marginLeft: 8,
+    fontSize: 14,
+  },
+  disabledButton: {
+    opacity: 0.7,
+  },
+  buttonLoadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 }); 

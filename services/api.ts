@@ -1,4 +1,6 @@
 import Constants from 'expo-constants';
+import { storageService } from './storage';
+import NetInfo from '@react-native-community/netinfo';
 
 // Define API base URL
 // In development, this would point to your local server
@@ -62,11 +64,22 @@ const getHeaders = (token?: string) => {
   return headers;
 };
 
+// Check if device is online
+const isOnline = async (): Promise<boolean> => {
+  const netInfo = await NetInfo.fetch();
+  return netInfo.isConnected ?? false;
+};
+
 // Authentication API calls
 export const authApi = {
   // Register a new user
   async register(email: string, password: string, fullName: string, state: string): Promise<AuthResponse> {
     try {
+      const online = await isOnline();
+      if (!online) {
+        throw new Error('No internet connection. Please try again when you\'re online.');
+      }
+      
       const response = await fetch(`${API_URL}/auth/signup`, {
         method: 'POST',
         headers: getHeaders(),
@@ -82,6 +95,11 @@ export const authApi = {
   // Login an existing user
   async login(email: string, password: string): Promise<AuthResponse> {
     try {
+      const online = await isOnline();
+      if (!online) {
+        throw new Error('No internet connection. Please try again when you\'re online.');
+      }
+      
       const response = await fetch(`${API_URL}/auth/login`, {
         method: 'POST',
         headers: getHeaders(),
@@ -97,6 +115,11 @@ export const authApi = {
   // Verify email with token
   async verifyEmail(token: string): Promise<ApiResponse<void>> {
     try {
+      const online = await isOnline();
+      if (!online) {
+        throw new Error('No internet connection. Please try again when you\'re online.');
+      }
+      
       const response = await fetch(`${API_URL}/auth/verify/${token}`, {
         method: 'GET',
         headers: getHeaders(),
@@ -107,6 +130,17 @@ export const authApi = {
       return handleApiError(error);
     }
   },
+  
+  // Log out user and clear local data
+  async logout(userId: string): Promise<void> {
+    try {
+      // Clear all user data from local storage
+      await storageService.clearAllUserData(userId);
+    } catch (error) {
+      console.error('Error during logout:', error);
+      throw error;
+    }
+  },
 };
 
 // Inspection API calls
@@ -115,14 +149,19 @@ export const inspectionApi = {
   async generateDDID(
     imageUrl: string, 
     description: string, 
-    state: string, 
+    userId: string, 
     token: string
   ): Promise<ApiResponse<{ ddidResponse: string }>> {
     try {
+      const online = await isOnline();
+      if (!online) {
+        throw new Error('No internet connection. DDID generation requires internet connectivity.');
+      }
+      
       const response = await fetch(`${API_URL}/inspections/generate-ddid`, {
         method: 'POST',
         headers: getHeaders(token),
-        body: JSON.stringify({ imageUrl, description, state }),
+        body: JSON.stringify({ imageUrl, description, userId }),
       });
       
       return await response.json();
@@ -140,13 +179,58 @@ export const inspectionApi = {
     token: string
   ): Promise<ApiResponse<{ inspection: Inspection }>> {
     try {
+      const online = await isOnline();
+      
+      // Create inspection object
+      const newInspection: Inspection = {
+        id: Date.now().toString(), // Temporary ID until we get a real one from the server
+        userId,
+        imageUrl,
+        description,
+        ddidResponse,
+        createdAt: new Date().toISOString(),
+      };
+      
+      // If offline, save to local storage and queue for later sync
+      if (!online) {
+        // Save to local storage
+        await storageService.addInspection(userId, newInspection);
+        
+        // Add to offline queue for later sync
+        await storageService.addToOfflineQueue(userId, {
+          type: 'create',
+          data: {
+            imageUrl,
+            description,
+            ddidResponse,
+          },
+        });
+        
+        // Return local response
+        return {
+          success: true,
+          message: 'Inspection saved locally. It will be synced when online.',
+          data: {
+            inspection: newInspection,
+          },
+        };
+      }
+      
+      // If online, send to server
       const response = await fetch(`${API_URL}/inspections`, {
         method: 'POST',
         headers: getHeaders(token),
         body: JSON.stringify({ userId, imageUrl, description, ddidResponse }),
       });
       
-      return await response.json();
+      const result = await response.json();
+      
+      // If successful, save to local storage
+      if (result.success && result.data) {
+        await storageService.addInspection(userId, result.data.inspection);
+      }
+      
+      return result;
     } catch (error) {
       return handleApiError(error);
     }
@@ -155,12 +239,52 @@ export const inspectionApi = {
   // Get all inspections for a user
   async getInspections(userId: string, token: string): Promise<ApiResponse<{ inspections: Inspection[] }>> {
     try {
-      const response = await fetch(`${API_URL}/inspections?userId=${userId}`, {
-        method: 'GET',
-        headers: getHeaders(token),
-      });
+      const online = await isOnline();
       
-      return await response.json();
+      // If offline, get from local storage
+      if (!online) {
+        const localInspections = await storageService.getInspections(userId);
+        return {
+          success: true,
+          message: 'Loaded from local storage (offline mode)',
+          data: {
+            inspections: localInspections,
+          },
+        };
+      }
+      
+      // If online, try to get from server and update local storage
+      try {
+        const response = await fetch(`${API_URL}/inspections?userId=${userId}`, {
+          method: 'GET',
+          headers: getHeaders(token),
+        });
+        
+        const result = await response.json();
+        
+        // If successful, update local storage
+        if (result.success && result.data) {
+          await storageService.saveInspections(userId, result.data.inspections);
+          await storageService.updateLastSyncTimestamp(userId);
+          
+          // Process offline queue if any
+          await this.syncOfflineQueue(userId, token);
+        }
+        
+        return result;
+      } catch (serverError) {
+        console.error('Server error, falling back to local storage:', serverError);
+        
+        // Fall back to local storage
+        const localInspections = await storageService.getInspections(userId);
+        return {
+          success: true,
+          message: 'Server unavailable. Loaded from local storage.',
+          data: {
+            inspections: localInspections,
+          },
+        };
+      }
     } catch (error) {
       return handleApiError(error);
     }
@@ -169,6 +293,30 @@ export const inspectionApi = {
   // Get a specific inspection
   async getInspection(id: string, userId: string, token: string): Promise<ApiResponse<{ inspection: Inspection }>> {
     try {
+      const online = await isOnline();
+      
+      // If offline, get from local storage
+      if (!online) {
+        const localInspections = await storageService.getInspections(userId);
+        const inspection = localInspections.find(insp => insp.id === id);
+        
+        if (!inspection) {
+          return {
+            success: false,
+            message: 'Inspection not found in local storage',
+          };
+        }
+        
+        return {
+          success: true,
+          message: 'Loaded from local storage (offline mode)',
+          data: {
+            inspection,
+          },
+        };
+      }
+      
+      // If online, get from server
       const response = await fetch(`${API_URL}/inspections/${id}?userId=${userId}`, {
         method: 'GET',
         headers: getHeaders(token),
@@ -179,6 +327,60 @@ export const inspectionApi = {
       return handleApiError(error);
     }
   },
+  
+  // Sync offline queue with server
+  async syncOfflineQueue(userId: string, token: string): Promise<void> {
+    try {
+      const online = await isOnline();
+      if (!online) {
+        console.log('Cannot sync offline queue: device is offline');
+        return;
+      }
+      
+      const queue = await storageService.getOfflineQueue(userId);
+      if (queue.length === 0) {
+        return;
+      }
+      
+      console.log(`Processing ${queue.length} items in offline queue`);
+      
+      for (const item of queue) {
+        try {
+          if (item.type === 'create') {
+            // Create inspection on server
+            await fetch(`${API_URL}/inspections`, {
+              method: 'POST',
+              headers: getHeaders(token),
+              body: JSON.stringify({ userId, ...item.data }),
+            });
+          } else if (item.type === 'update') {
+            // Update inspection on server
+            await fetch(`${API_URL}/inspections/${item.data.id}`, {
+              method: 'PUT',
+              headers: getHeaders(token),
+              body: JSON.stringify({ userId, ...item.data }),
+            });
+          } else if (item.type === 'delete') {
+            // Delete inspection on server
+            await fetch(`${API_URL}/inspections/${item.data.id}?userId=${userId}`, {
+              method: 'DELETE',
+              headers: getHeaders(token),
+            });
+          }
+          
+          // Remove processed item from queue
+          await storageService.removeFromOfflineQueue(userId, item.id);
+        } catch (error) {
+          console.error(`Error processing queue item ${item.id}:`, error);
+          // Continue with next item
+        }
+      }
+      
+      console.log('Offline queue processed');
+    } catch (error) {
+      console.error('Error syncing offline queue:', error);
+    }
+  },
 };
 
 // User API calls
@@ -186,6 +388,11 @@ export const userApi = {
   // Get user profile
   async getProfile(userId: string, token: string): Promise<ApiResponse<{ user: User }>> {
     try {
+      const online = await isOnline();
+      if (!online) {
+        throw new Error('No internet connection. Unable to load profile.');
+      }
+      
       const response = await fetch(`${API_URL}/user/profile?userId=${userId}`, {
         method: 'GET',
         headers: getHeaders(token),
@@ -204,6 +411,23 @@ export const userApi = {
     token: string
   ): Promise<ApiResponse<{ user: User }>> {
     try {
+      const online = await isOnline();
+      if (!online) {
+        // Add to offline queue for later update
+        await storageService.addToOfflineQueue(userId, {
+          type: 'update',
+          data: {
+            id: userId,
+            ...data,
+          },
+        });
+        
+        return {
+          success: true,
+          message: 'Profile update queued for when you\'re back online',
+        };
+      }
+      
       const response = await fetch(`${API_URL}/user/profile?userId=${userId}`, {
         method: 'PUT',
         headers: getHeaders(token),
@@ -224,6 +448,11 @@ export const userApi = {
     token: string
   ): Promise<ApiResponse<void>> {
     try {
+      const online = await isOnline();
+      if (!online) {
+        throw new Error('No internet connection. Password update requires internet connectivity.');
+      }
+      
       const response = await fetch(`${API_URL}/user/password?userId=${userId}`, {
         method: 'PUT',
         headers: getHeaders(token),

@@ -1,5 +1,5 @@
 import React from 'react';
-import { TouchableOpacity, StyleSheet } from 'react-native';
+import { TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, DrawerActions } from '@react-navigation/native';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -19,7 +19,11 @@ export default function DrawerButton({ color, size = 24 }: DrawerButtonProps) {
   };
 
   return (
-    <TouchableOpacity style={styles.container} onPress={handlePress}>
+    <TouchableOpacity 
+      style={styles.container} 
+      onPress={handlePress}
+      activeOpacity={0.7}
+    >
       <Ionicons 
         name="menu-outline" 
         size={size} 
@@ -32,5 +36,7 @@ export default function DrawerButton({ color, size = 24 }: DrawerButtonProps) {
 const styles = StyleSheet.create({
   container: {
     padding: 8,
+    borderRadius: 20,
+    marginLeft: Platform.OS === 'ios' ? 8 : 0,
   },
 }); 
