@@ -5,34 +5,33 @@
 
 /**
  * Colors for Spediak App based on Frontend Guidelines
- * Primary: #0A2540 (Deep Navy Blue)
- * Secondary: #FFFFFF (Clean White)
- * Accent: #28A745 (Vibrant Green for actionable items)
- * Background: #F4F6F8 (Light, neutral tone)
- * Error/Alert: #D9534F (Soft Red)
+ * Primary: #0D47A1 (Deep Blue)
+ * Secondary: #EEEEEE (Light Gray)
+ * Background: #FFFFFF (White)
+ * Text: #333333 (Dark Text)
  */
 
 export const Colors = {
   light: {
     text: '#333333', // Dark Text
-    background: '#F4F6F8', // Background
-    tint: '#0A2540', // Primary
-    accent: '#28A745', // Accent
-    error: '#D9534F', // Error/Alert
-    secondary: '#FFFFFF', // Secondary
-    icon: '#0A2540',
-    tabIconDefault: '#687076',
-    tabIconSelected: '#0A2540',
+    background: '#FFFFFF', // White Background
+    tint: '#0D47A1', // Primary Deep Blue
+    accent: '#0D47A1', // Using Primary as accent
+    error: '#D9534F', // Keeping Error/Alert
+    secondary: '#EEEEEE', // Light Gray
+    icon: '#0D47A1',
+    tabIconDefault: '#999999',
+    tabIconSelected: '#0D47A1',
   },
   dark: {
-    text: '#ECEDEE',
-    background: '#0A2540', // Dark mode uses primary as background
-    tint: '#FFFFFF', // Secondary becomes tint in dark mode
-    accent: '#28A745', // Accent stays same
-    error: '#D9534F', // Error/Alert stays same
-    secondary: '#1E3A5F', // Darker shade of primary for secondary in dark mode
+    text: '#FFFFFF', // White Text
+    background: '#333333', // Dark Background
+    tint: '#0D47A1', // Primary Deep Blue
+    accent: '#0D47A1', // Using Primary as accent
+    error: '#D9534F', // Keeping Error/Alert
+    secondary: '#EEEEEE', // Light Gray
     icon: '#FFFFFF',
-    tabIconDefault: '#9BA1A6',
-    tabIconSelected: '#FFFFFF',
+    tabIconDefault: '#BBBBBB',
+    tabIconSelected: '#0D47A1',
   },
 };

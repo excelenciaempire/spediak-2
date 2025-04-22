@@ -1,4 +1,4 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import { Drawer } from 'expo-router/drawer';
 import * as SplashScreen from 'expo-splash-screen';
@@ -12,12 +12,13 @@ import { Stack } from 'expo-router';
 import { AuthProvider } from '@/context/AuthContext';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { View, Text, ActivityIndicator } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
+  const colorScheme = useColorScheme(); // This will always return 'light'
   const [loaded] = useFonts({
     // We'll replace SpaceMono with Helvetica or Arial as per frontend guidelines
     // For now, we'll keep SpaceMono as a fallback
@@ -35,41 +36,41 @@ export default function RootLayout() {
   }
 
   return (
-    <AuthProvider>
-      <SafeAreaProvider>
-        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen 
-              name="(auth)" 
-              options={{
-                // Auth screens don't need a gesture to dismiss
-                gestureEnabled: false,
-              }}
-            />
-            <Stack.Screen 
-              name="(app)" 
-              options={{
-                // Don't allow the user to swipe back to auth screens
-                gestureEnabled: false,
-              }}
-            />
-            <Stack.Screen name="+not-found" />
-          </Stack>
-          <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
-        </ThemeProvider>
-      </SafeAreaProvider>
-    </AuthProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <AuthProvider>
+        <SafeAreaProvider>
+          <ThemeProvider value={DefaultTheme}>
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen 
+                name="(auth)" 
+                options={{
+                  // Auth screens don't need a gesture to dismiss
+                  gestureEnabled: false,
+                }}
+              />
+              <Stack.Screen 
+                name="(app)" 
+                options={{
+                  // Don't allow the user to swipe back to auth screens
+                  gestureEnabled: false,
+                }}
+              />
+              <Stack.Screen name="+not-found" />
+            </Stack>
+            <StatusBar style="dark" />
+          </ThemeProvider>
+        </SafeAreaProvider>
+      </AuthProvider>
+    </GestureHandlerRootView>
   );
 }
 
 // Fallback Error Boundary component
 export function ErrorBoundary({ error }: { error: Error }) {
-  const colorScheme = useColorScheme();
-  
   return (
     <View style={{ 
       flex: 1, 
-      backgroundColor: Colors[colorScheme || 'light'].background,
+      backgroundColor: Colors.light.background,
       justifyContent: 'center',
       alignItems: 'center',
       padding: 20
@@ -77,20 +78,20 @@ export function ErrorBoundary({ error }: { error: Error }) {
       <Text style={{ 
         fontSize: 22, 
         fontWeight: 'bold',
-        color: Colors[colorScheme || 'light'].text,
+        color: Colors.light.text,
         marginBottom: 10
       }}>
         Oops! Something went wrong
       </Text>
       <Text style={{ 
-        color: Colors[colorScheme || 'light'].text,
+        color: Colors.light.text,
         textAlign: 'center',
         marginBottom: 20
       }}>
         {error.message || 'An unexpected error occurred.'}
       </Text>
       <Text style={{ 
-        color: Colors[colorScheme || 'light'].tabIconDefault,
+        color: Colors.light.tabIconDefault,
         fontSize: 12,
         marginTop: 10
       }}>

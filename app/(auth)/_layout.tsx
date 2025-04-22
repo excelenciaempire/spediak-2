@@ -3,20 +3,21 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { Colors } from '@/constants/Colors';
 
 export default function AuthLayout() {
-  const colorScheme = useColorScheme() || 'light';
+  // Will always return 'light'
+  const colorScheme = useColorScheme();
 
   return (
     <Stack
       screenOptions={{
         headerStyle: {
-          backgroundColor: Colors[colorScheme as 'light' | 'dark'].tint,
+          backgroundColor: Colors.light.tint,
         },
-        headerTintColor: Colors[colorScheme as 'light' | 'dark'].secondary,
+        headerTintColor: Colors.light.secondary,
         headerTitleStyle: {
           fontWeight: 'bold',
         },
         contentStyle: {
-          backgroundColor: Colors[colorScheme as 'light' | 'dark'].background,
+          backgroundColor: Colors.light.background,
         },
       }}
     >

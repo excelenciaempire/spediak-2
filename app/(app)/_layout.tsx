@@ -8,8 +8,8 @@ import { router } from 'expo-router';
 import { useNavigation } from '@react-navigation/native';
 
 export default function AppLayout() {
-  const colorScheme = useColorScheme();
-  const drawerTheme = colorScheme === 'dark' ? Colors.dark : Colors.light;
+  // useColorScheme will always return 'light'
+  const drawerTheme = Colors.light;
   
   const handleLogout = () => {
     // In a real app, this would clear user session/tokens from secure storage
@@ -134,7 +134,7 @@ const styles = StyleSheet.create({
   drawerHeader: {
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.1)',
+    borderBottomColor: '#EEEEEE',
     marginBottom: 10,
     alignItems: 'center',
   },
@@ -154,7 +154,7 @@ const styles = StyleSheet.create({
   logoutContainer: {
     marginTop: 'auto',
     borderTopWidth: 1,
-    borderTopColor: 'rgba(0,0,0,0.1)',
+    borderTopColor: '#EEEEEE',
     padding: 20,
   },
   logoutButton: {

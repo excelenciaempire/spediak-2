@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useLayoutEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, TextInput, ActivityIndicator, Modal, ScrollView, Alert } from 'react-native';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { Colors } from '@/constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { useNavigation } from '@react-navigation/native';
+import DrawerButton from '@/components/DrawerButton';
 // Note: expo-speech-recognition might not be directly available
 // In a real implementation, you would use expo-speech or a similar package
 // For this example, we'll mock the interface
@@ -33,7 +35,17 @@ interface SpeechResult {
 }
 
 export default function NewInspectionScreen() {
-  const colorScheme = useColorScheme() || 'light'; // Provide a default value
+  // Will always be 'light'
+  const colorScheme = useColorScheme();
+  const navigation = useNavigation();
+  
+  // Set up the drawer menu button in the header
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerLeft: () => <DrawerButton />,
+    });
+  }, [navigation]);
+  
   const [image, setImage] = useState<string | null>(null);
   const [description, setDescription] = useState('');
   const [isRecording, setIsRecording] = useState(false);
@@ -209,7 +221,7 @@ The inspector recommends having a licensed plumber evaluate the source of the le
   };
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: Colors[colorScheme as 'light' | 'dark'].background }]}>
+    <ScrollView style={[styles.container, { backgroundColor: Colors.light.background }]}>
       <View style={styles.content}>
         {/* Image Upload Area */}
         <TouchableOpacity
@@ -230,8 +242,8 @@ The inspector recommends having a licensed plumber evaluate the source of the le
             <Image source={{ uri: image }} style={styles.uploadedImage} />
           ) : (
             <View style={styles.uploadPlaceholder}>
-              <Ionicons name="camera" size={40} color={Colors[colorScheme as 'light' | 'dark'].icon} />
-              <Text style={[styles.uploadText, { color: Colors[colorScheme as 'light' | 'dark'].text }]}>
+              <Ionicons name="camera" size={40} color={Colors.light.icon} />
+              <Text style={[styles.uploadText, { color: Colors.light.text }]}>
                 Tap to upload or take a photo
               </Text>
             </View>
@@ -244,13 +256,13 @@ The inspector recommends having a licensed plumber evaluate the source of the le
             style={[
               styles.textInput,
               { 
-                color: Colors[colorScheme as 'light' | 'dark'].text,
-                backgroundColor: Colors[colorScheme as 'light' | 'dark'].secondary,
-                borderColor: Colors[colorScheme as 'light' | 'dark'].icon,
+                color: Colors.light.text,
+                backgroundColor: Colors.light.secondary,
+                borderColor: Colors.light.icon,
               }
             ]}
             placeholder="Describe the issue..."
-            placeholderTextColor={Colors[colorScheme as 'light' | 'dark'].tabIconDefault}
+            placeholderTextColor={Colors.light.tabIconDefault}
             value={description}
             onChangeText={setDescription}
             multiline
@@ -258,14 +270,14 @@ The inspector recommends having a licensed plumber evaluate the source of the le
           <TouchableOpacity
             style={[
               styles.micButton,
-              isRecording && { backgroundColor: Colors[colorScheme as 'light' | 'dark'].error }
+              isRecording && { backgroundColor: Colors.light.error }
             ]}
             onPress={isRecording ? stopVoiceToText : startVoiceToText}
           >
             <Ionicons 
               name={isRecording ? "mic" : "mic-outline"} 
               size={24} 
-              color={Colors[colorScheme as 'light' | 'dark'].secondary} 
+              color={Colors.light.secondary} 
             />
           </TouchableOpacity>
         </View>
@@ -275,13 +287,13 @@ The inspector recommends having a licensed plumber evaluate the source of the le
           style={[
             styles.generateButton,
             isGenerateDisabled && styles.disabledButton,
-            { backgroundColor: isGenerateDisabled ? '#cccccc' : Colors[colorScheme as 'light' | 'dark'].accent }
+            { backgroundColor: isGenerateDisabled ? '#cccccc' : Colors.light.accent }
           ]}
           onPress={handleGenerateDDID}
           disabled={isGenerateDisabled || isLoading}
         >
           {isLoading ? (
-            <ActivityIndicator color={Colors[colorScheme as 'light' | 'dark'].secondary} />
+            <ActivityIndicator color={Colors.light.secondary} />
           ) : (
             <Text style={styles.generateButtonText}>Generate DDID Response</Text>
           )}
@@ -291,11 +303,11 @@ The inspector recommends having a licensed plumber evaluate the source of the le
         <TouchableOpacity
           style={[
             styles.newInspectionButton,
-            { borderColor: Colors[colorScheme as 'light' | 'dark'].accent }
+            { borderColor: Colors.light.accent }
           ]}
           onPress={handleNewInspection}
         >
-          <Text style={[styles.newInspectionButtonText, { color: Colors[colorScheme as 'light' | 'dark'].accent }]}>
+          <Text style={[styles.newInspectionButtonText, { color: Colors.light.accent }]}>
             New Inspection
           </Text>
         </TouchableOpacity>
@@ -309,18 +321,18 @@ The inspector recommends having a licensed plumber evaluate the source of the le
         onRequestClose={() => setModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: Colors[colorScheme as 'light' | 'dark'].secondary }]}>
+          <View style={[styles.modalContent, { backgroundColor: Colors.light.secondary }]}>
             <View style={styles.modalHeader}>
               <TouchableOpacity onPress={() => setModalVisible(false)}>
-                <Ionicons name="close" size={24} color={Colors[colorScheme as 'light' | 'dark'].text} />
+                <Ionicons name="close" size={24} color={Colors.light.text} />
               </TouchableOpacity>
-              <Text style={[styles.modalTitle, { color: Colors[colorScheme as 'light' | 'dark'].text }]}>DDID Response</Text>
+              <Text style={[styles.modalTitle, { color: Colors.light.text }]}>DDID Response</Text>
               <TouchableOpacity onPress={copyToClipboard}>
-                <Ionicons name="copy-outline" size={24} color={Colors[colorScheme as 'light' | 'dark'].accent} />
+                <Ionicons name="copy-outline" size={24} color={Colors.light.accent} />
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.modalBody}>
-              <Text style={[styles.ddidText, { color: Colors[colorScheme as 'light' | 'dark'].text }]}>
+              <Text style={[styles.ddidText, { color: Colors.light.text }]}>
                 {ddidResponse}
               </Text>
             </ScrollView>
@@ -348,7 +360,7 @@ const styles = StyleSheet.create({
   },
   imageUploadAreaEmpty: {
     borderWidth: 2,
-    borderColor: '#cccccc',
+    borderColor: '#EEEEEE',
     borderStyle: 'dashed',
     justifyContent: 'center',
     alignItems: 'center',
@@ -385,7 +397,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 8,
     bottom: 8,
-    backgroundColor: '#0A2540',
+    backgroundColor: '#0D47A1',
     width: 40,
     height: 40,
     borderRadius: 20,
@@ -445,7 +457,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#eeeeee',
+    borderBottomColor: '#EEEEEE',
   },
   modalTitle: {
     fontSize: 18,

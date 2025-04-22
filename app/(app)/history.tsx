@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Modal, ScrollView } from 'react-native';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { Colors } from '@/constants/Colors';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import DrawerButton from '@/components/DrawerButton';
 
 // Mock data for inspection history
 const MOCK_INSPECTIONS = [
@@ -38,9 +40,18 @@ interface Inspection {
 }
 
 export default function InspectionHistoryScreen() {
-  const colorScheme = useColorScheme() || 'light';
+  // Will always return 'light'
+  const colorScheme = useColorScheme();
+  const navigation = useNavigation();
   const [selectedInspection, setSelectedInspection] = useState<Inspection | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
+
+  // Set up the drawer menu button in the header
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerLeft: () => <DrawerButton />,
+    });
+  }, [navigation]);
 
   const formatDate = (dateString: string) => {
     const options: Intl.DateTimeFormatOptions = {
@@ -72,44 +83,44 @@ export default function InspectionHistoryScreen() {
     <TouchableOpacity
       style={[
         styles.inspectionItem,
-        { backgroundColor: Colors[colorScheme as 'light' | 'dark'].secondary }
+        { backgroundColor: Colors.light.secondary }
       ]}
       onPress={() => openInspectionDetails(item)}
     >
       <Image source={{ uri: item.imageUrl }} style={styles.thumbnailImage} />
       <View style={styles.inspectionInfo}>
-        <Text style={[styles.descriptionText, { color: Colors[colorScheme as 'light' | 'dark'].text }]}>
+        <Text style={[styles.descriptionText, { color: Colors.light.text }]}>
           {truncateText(item.description, 70)}
         </Text>
-        <Text style={[styles.ddidSnippet, { color: Colors[colorScheme as 'light' | 'dark'].text }]}>
+        <Text style={[styles.ddidSnippet, { color: Colors.light.text }]}>
           {truncateText(item.ddidResponse, 100)}
         </Text>
-        <Text style={[styles.dateText, { color: Colors[colorScheme as 'light' | 'dark'].tabIconDefault }]}>
+        <Text style={[styles.dateText, { color: Colors.light.tabIconDefault }]}>
           {formatDate(item.createdAt)}
         </Text>
       </View>
       <Ionicons
         name="chevron-forward"
         size={20}
-        color={Colors[colorScheme as 'light' | 'dark'].tabIconDefault}
+        color={Colors.light.tabIconDefault}
         style={styles.chevronIcon}
       />
     </TouchableOpacity>
   );
 
   return (
-    <View style={[styles.container, { backgroundColor: Colors[colorScheme as 'light' | 'dark'].background }]}>
+    <View style={[styles.container, { backgroundColor: Colors.light.background }]}>
       {MOCK_INSPECTIONS.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Ionicons
             name="document-text-outline"
             size={50}
-            color={Colors[colorScheme as 'light' | 'dark'].tabIconDefault}
+            color={Colors.light.tabIconDefault}
           />
-          <Text style={[styles.emptyText, { color: Colors[colorScheme as 'light' | 'dark'].text }]}>
+          <Text style={[styles.emptyText, { color: Colors.light.text }]}>
             No inspection history yet
           </Text>
-          <Text style={[styles.emptySubtext, { color: Colors[colorScheme as 'light' | 'dark'].tabIconDefault }]}>
+          <Text style={[styles.emptySubtext, { color: Colors.light.tabIconDefault }]}>
             Your completed inspections will appear here
           </Text>
         </View>
@@ -131,16 +142,16 @@ export default function InspectionHistoryScreen() {
         onRequestClose={() => setModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: Colors[colorScheme as 'light' | 'dark'].secondary }]}>
+          <View style={[styles.modalContent, { backgroundColor: Colors.light.secondary }]}>
             <View style={styles.modalHeader}>
               <TouchableOpacity onPress={() => setModalVisible(false)}>
-                <Ionicons name="close" size={24} color={Colors[colorScheme as 'light' | 'dark'].text} />
+                <Ionicons name="close" size={24} color={Colors.light.text} />
               </TouchableOpacity>
-              <Text style={[styles.modalTitle, { color: Colors[colorScheme as 'light' | 'dark'].text }]}>
+              <Text style={[styles.modalTitle, { color: Colors.light.text }]}>
                 Inspection Details
               </Text>
               <TouchableOpacity onPress={copyToClipboard}>
-                <Ionicons name="copy-outline" size={24} color={Colors[colorScheme as 'light' | 'dark'].accent} />
+                <Ionicons name="copy-outline" size={24} color={Colors.light.accent} />
               </TouchableOpacity>
             </View>
 
@@ -152,26 +163,26 @@ export default function InspectionHistoryScreen() {
                   resizeMode="cover"
                 />
                 <View style={styles.modalInfoSection}>
-                  <Text style={[styles.sectionTitle, { color: Colors[colorScheme as 'light' | 'dark'].text }]}>
+                  <Text style={[styles.sectionTitle, { color: Colors.light.text }]}>
                     Description
                   </Text>
-                  <Text style={[styles.sectionContent, { color: Colors[colorScheme as 'light' | 'dark'].text }]}>
+                  <Text style={[styles.sectionContent, { color: Colors.light.text }]}>
                     {selectedInspection.description}
                   </Text>
                 </View>
                 <View style={styles.modalInfoSection}>
-                  <Text style={[styles.sectionTitle, { color: Colors[colorScheme as 'light' | 'dark'].text }]}>
+                  <Text style={[styles.sectionTitle, { color: Colors.light.text }]}>
                     DDID Response
                   </Text>
-                  <Text style={[styles.sectionContent, { color: Colors[colorScheme as 'light' | 'dark'].text }]}>
+                  <Text style={[styles.sectionContent, { color: Colors.light.text }]}>
                     {selectedInspection.ddidResponse}
                   </Text>
                 </View>
                 <View style={styles.modalInfoSection}>
-                  <Text style={[styles.sectionTitle, { color: Colors[colorScheme as 'light' | 'dark'].text }]}>
+                  <Text style={[styles.sectionTitle, { color: Colors.light.text }]}>
                     Date Created
                   </Text>
-                  <Text style={[styles.sectionContent, { color: Colors[colorScheme as 'light' | 'dark'].text }]}>
+                  <Text style={[styles.sectionContent, { color: Colors.light.text }]}>
                     {formatDate(selectedInspection.createdAt)}
                   </Text>
                 </View>
@@ -270,7 +281,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#eeeeee',
+    borderBottomColor: '#EEEEEE',
   },
   modalTitle: {
     fontSize: 18,
