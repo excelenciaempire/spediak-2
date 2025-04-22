@@ -128,49 +128,69 @@ export default function NewInspectionScreen() {
     setUploadedImageUrl(null);
 
     try {
-      // Still use URI to determine extension and filename
       const uri = asset.uri;
-      const fileExtension = uri.split('.').pop()?.toLowerCase() || 'jpg';
-      const contentType = `image/${fileExtension === 'jpg' ? 'jpeg' : fileExtension}`;
+      const webMimeType = Platform.OS === 'web' ? asset.mimeType : null;
+      
+      // *** Reliable File Extension Extraction ***
+      let fileExtension = 'jpg'; // Default extension
+      if (webMimeType) {
+        const extensionFromMime = webMimeType.split('/')[1];
+        if (extensionFromMime) {
+           fileExtension = extensionFromMime;
+        }
+      } else {
+        // Fallback for native or if mimeType is missing - try splitting URI
+        // This part is less reliable for data URIs but might work for file URIs
+         const extensionFromUri = uri.split('.').pop()?.toLowerCase();
+         if (extensionFromUri && extensionFromUri.length < 5) { // Basic sanity check
+            fileExtension = extensionFromUri;
+         }
+      }
+      // *** End Extension Extraction ***
+      
+      const contentType = webMimeType || `image/${fileExtension === 'jpg' ? 'jpeg' : fileExtension}`;
+      // *** Use CORRECT fileExtension ***
       const fileName = `${Date.now()}.${fileExtension}`;
       const filePath = `${authUser.id}/${fileName}`;
-      const BUCKET_NAME = 'inspection_images';
+      const BUCKET_NAME = 'inspection.images';
 
-      let blob: Blob;
+      let fileData: Blob | ArrayBuffer;
 
-      // Platform-specific handling to get the Blob
+      // Platform-specific handling to get the data
       if (Platform.OS === 'web') {
-        // On web, fetch the blob URI to get the Blob object
-        // This might still face issues depending on browser security
-        console.log("Attempting to fetch web asset URI:", uri);
+        // --- WEB --- 
+        // Fetch the data URI to get the Blob object.
+        console.log("Attempting to fetch web asset URI (data URI):", uri);
         const response = await fetch(uri);
         if (!response.ok) {
-          console.error("Fetch failed for web URI:", uri, "Status:", response.status, "Status text:", response.statusText);
-          // Try to provide a more specific error message if possible
-          let errorMessage = `Failed to fetch web image file. Status: ${response.status}`;
-          if (response.status === 0) { // Often indicates a CORS or network error
-             errorMessage += ' (Network error or CORS issue likely)';
-          }
-          throw new Error(errorMessage);
+            console.error("Fetch failed for web data URI:", uri, "Status:", response.status, "Status text:", response.statusText);
+            let errorMessage = `Failed to fetch web image file. Status: ${response.status}`;
+            if (response.status === 0) { errorMessage += ' (Network error or CORS issue likely)'; }
+            throw new Error(errorMessage);
         }
-        blob = await response.blob();
-        console.log("Web fetch successful, got blob:", blob);
+        fileData = await response.blob(); // Get the blob
+        console.log("Web fetch successful, got blob:", fileData);
+
       } else {
-        // Native platform: fetch the file URI (this worked previously)
+        // --- NATIVE --- 
+        // Fetch the file URI and get ArrayBuffer
         const response = await fetch(uri);
         if (!response.ok) throw new Error('Failed to fetch local image file.');
-        blob = await response.blob();
+        fileData = await response.arrayBuffer(); // Get ArrayBuffer for native upload
+        console.log("Native fetch successful, got ArrayBuffer");
       }
 
-      console.log(`Uploading blob (Size: ${blob.size}, Type: ${blob.type}) to path: ${filePath}`);
+      console.log(`Uploading data (Type: ${Platform.OS === 'web' ? (fileData as Blob).type : 'ArrayBuffer'}, Size: ${Platform.OS === 'web' ? (fileData as Blob).size : (fileData as ArrayBuffer).byteLength}) to CORRECT path: ${filePath}`);
 
-      // Upload the blob to Supabase
+      // Upload the data to Supabase with CORRECT filePath
       const { error: uploadError } = await supabase.storage
         .from(BUCKET_NAME)
-        .upload(filePath, blob, { contentType, upsert: false });
+        .upload(filePath, fileData, { 
+            contentType, 
+            upsert: false, 
+         });
 
       if (uploadError) {
-        // Log the detailed Supabase error
         console.error('Supabase upload error details:', uploadError);
         throw new Error(`Supabase upload error: ${uploadError.message}`);
       }
@@ -207,10 +227,27 @@ export default function NewInspectionScreen() {
         allowsEditing: true,
         aspect: [4, 3],
         quality: 0.8,
+        // Request base64 data as a potential fallback? (Might increase memory usage)
+        // base64: Platform.OS === 'web', 
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const asset = result.assets[0];
+        
+        // *** Add detailed logging for web asset ***
+        if (Platform.OS === 'web') {
+          console.log("--- Web ImagePicker Result Asset ---");
+          console.log("Asset URI:", asset.uri);
+          console.log("Asset Type:", asset.mimeType);
+          console.log("Asset Size:", asset.fileSize);
+          console.log("Asset Width:", asset.width);
+          console.log("Asset Height:", asset.height);
+          console.log("Asset Keys:", Object.keys(asset));
+          // Check if it has properties resembling a File object
+          console.log("Asset looks like File?", ('name' in asset && 'lastModified' in asset)); 
+          console.log("-------------------------------------");
+        }
+        
         const fileSize = asset.fileSize || 0;
         
         if (fileSize > 5 * 1024 * 1024) {

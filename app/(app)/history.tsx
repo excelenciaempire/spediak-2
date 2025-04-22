@@ -33,7 +33,7 @@ export default function InspectionHistoryScreen() {
   // Will always return 'light'
   const colorScheme = useColorScheme();
   const navigation = useNavigation();
-  const { user, token } = useAuth();
+  const { user, session } = useAuth();
   
   const [inspections, setInspections] = useState<Inspection[]>([]);
   const [filteredInspections, setFilteredInspections] = useState<Inspection[]>([]);
@@ -120,11 +120,11 @@ export default function InspectionHistoryScreen() {
   };
 
   const fetchInspections = useCallback(async () => {
-    if (!user?.id || !token) return;
+    if (!user?.id /* || !session?.access_token */) return;
     
     try {
       setError(null);
-      const response = await inspectionApi.getInspections(user.id, token);
+      const response = await inspectionApi.getInspections(user.id);
       
       // Check if loaded from local storage
       if (response.message?.includes('local storage')) {
@@ -172,7 +172,7 @@ export default function InspectionHistoryScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [user?.id, token, sortOrder]);
+  }, [user?.id, /* session?.access_token, */ sortOrder]);
 
   useEffect(() => {
     fetchInspections();
@@ -264,7 +264,7 @@ export default function InspectionHistoryScreen() {
   };
   
   const syncNow = async () => {
-    if (!user?.id || !token) return;
+    if (!user?.id /* || !session?.access_token */) return;
     
     const netInfo = await NetInfo.fetch();
     if (!netInfo.isConnected) {
@@ -275,7 +275,7 @@ export default function InspectionHistoryScreen() {
     setRefreshing(true);
     try {
       // This will process the offline queue
-      await inspectionApi.getInspections(user.id, token);
+      await inspectionApi.getInspections(user.id);
       showToast('Synced successfully');
       
       // Update last sync time display
@@ -572,10 +572,10 @@ const styles = StyleSheet.create({
     padding: 12,
     margin: 16,
     borderLeftWidth: 4,
-    borderLeftColor: Colors.light.error,
+    borderLeftColor: Colors.light.danger,
   },
   errorText: {
-    color: Colors.light.error,
+    color: Colors.light.danger,
     fontSize: 14,
   },
   emptyContainer: {
