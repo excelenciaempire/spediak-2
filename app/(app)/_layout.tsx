@@ -2,23 +2,26 @@ import { Drawer } from 'expo-router/drawer';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/Colors';
-import { Alert, Image, StyleSheet, Text, TouchableOpacity, View, Dimensions } from 'react-native';
+import { Alert, StyleSheet, Text, TouchableOpacity, View, Dimensions } from 'react-native';
 import { DrawerContentScrollView, DrawerItemList, createDrawerNavigator } from '@react-navigation/drawer';
 import { router } from 'expo-router';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAuth } from '@/context/AuthContext';
 
 export default function AppLayout() {
   // useColorScheme will always return 'light'
   const drawerTheme = Colors.light;
   const insets = useSafeAreaInsets();
+  const { logout } = useAuth();
   
-  const handleLogout = () => {
-    // In a real app, this would clear user session/tokens from secure storage
-    Alert.alert('Logging Out', 'You are being logged out...');
-    
-    // Navigate to login screen
-    router.replace('/(auth)/login');
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch (error) {
+      console.error("Logout failed:", error);
+      Alert.alert('Error', 'Logout failed. Please try again.');
+    }
   };
 
   // Custom drawer content component
@@ -35,11 +38,6 @@ export default function AppLayout() {
       >
         {/* Header with logo/user info */}
         <View style={[styles.drawerHeader, { paddingTop: insets.top > 0 ? insets.top : 20 }]}>
-          <Image 
-            source={require('@/assets/images/spediak-logo.png')} 
-            style={styles.drawerLogo}
-            resizeMode="contain"
-          />
           <Text style={[styles.drawerTitle, { color: drawerTheme.text }]}>
             Spediak
           </Text>
@@ -55,28 +53,10 @@ export default function AppLayout() {
         <View style={[styles.logoutContainer, { paddingBottom: insets.bottom > 0 ? insets.bottom : 20 }]}>
           <TouchableOpacity 
             style={styles.logoutButton}
-            onPress={() => {
-              // Show confirmation dialog
-              Alert.alert(
-                'Logout',
-                'Are you sure you want to logout?',
-                [
-                  {
-                    text: 'Cancel',
-                    style: 'cancel',
-                  },
-                  {
-                    text: 'Logout',
-                    onPress: handleLogout,
-                    style: 'destructive',
-                  },
-                ],
-                { cancelable: true }
-              );
-            }}
+            onPress={handleLogout}
           >
-            <Ionicons name="log-out-outline" size={22} color={drawerTheme.error} />
-            <Text style={[styles.logoutText, { color: drawerTheme.error }]}>Logout</Text>
+            <Ionicons name="log-out-outline" size={22} color={drawerTheme.danger} />
+            <Text style={[styles.logoutText, { color: drawerTheme.danger }]}>Logout</Text>
           </TouchableOpacity>
         </View>
       </DrawerContentScrollView>
@@ -154,11 +134,6 @@ const styles = StyleSheet.create({
     borderBottomColor: '#EEEEEE',
     marginBottom: 10,
     alignItems: 'center',
-  },
-  drawerLogo: {
-    width: 80,
-    height: 80,
-    marginBottom: 10,
   },
   drawerTitle: {
     fontSize: 22,

@@ -59,7 +59,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         setUser(data.user);
         // Optionally store profile for faster subsequent loads (ONLY ON NATIVE)
         if (Platform.OS !== 'web') {
-          await SecureStore.setItemAsync(USER_PROFILE_KEY, JSON.stringify(data.user));
+        await SecureStore.setItemAsync(USER_PROFILE_KEY, JSON.stringify(data.user));
         }
         setError(null); // Clear previous errors on successful fetch
       } else {
@@ -79,7 +79,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       setUser(null); // Ensure profile state is null on error
       // Clear potentially stale profile (ONLY ON NATIVE)
       if (Platform.OS !== 'web') {
-         await SecureStore.deleteItemAsync(USER_PROFILE_KEY);
+      await SecureStore.deleteItemAsync(USER_PROFILE_KEY);
       }
     }
   };
@@ -90,29 +90,29 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     // Avoid accessing storage or window object directly here during SSR
 
     const initializeAuth = async () => {
-      setIsLoading(true);
-      let profileLoadedFromStorage = false;
+    setIsLoading(true);
+    let profileLoadedFromStorage = false;
 
       try {
         // Try loading profile from SecureStore first (ONLY ON NATIVE)
         if (Platform.OS !== 'web') {
           const storedProfile = await SecureStore.getItemAsync(USER_PROFILE_KEY);
-          if (storedProfile) {
-            try {
-              const parsedProfile = JSON.parse(storedProfile);
-              if (parsedProfile && typeof parsedProfile === 'object' && 'id' in parsedProfile) {
-                setUser(parsedProfile);
-                profileLoadedFromStorage = true;
-                console.log("Loaded user profile from storage.");
-              } else {
-                console.warn("Invalid user profile found in storage, removing.");
+      if (storedProfile) {
+         try {
+            const parsedProfile = JSON.parse(storedProfile);
+            if (parsedProfile && typeof parsedProfile === 'object' && 'id' in parsedProfile) {
+               setUser(parsedProfile);
+               profileLoadedFromStorage = true;
+               console.log("Loaded user profile from storage.");
+            } else {
+               console.warn("Invalid user profile found in storage, removing.");
                 await SecureStore.deleteItemAsync(USER_PROFILE_KEY);
-              }
-            } catch (e) {
-              console.error("Failed to parse stored user profile, removing.", e);
-              await SecureStore.deleteItemAsync(USER_PROFILE_KEY);
             }
-          }
+         } catch (e) {
+            console.error("Failed to parse stored user profile, removing.", e);
+              await SecureStore.deleteItemAsync(USER_PROFILE_KEY);
+         }
+      }
         }
 
         // Now check Supabase session - this part accesses AsyncStorage indirectly
@@ -124,22 +124,22 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           // setUser(null); setAuthUser(null); setSession(null);
           // await SecureStore.deleteItemAsync(USER_PROFILE_KEY);
         } else {
-          setSession(initialSession);
-          const currentAuthUser = initialSession?.user ?? null;
-          setAuthUser(currentAuthUser);
+      setSession(initialSession);
+      const currentAuthUser = initialSession?.user ?? null;
+      setAuthUser(currentAuthUser);
 
-          if (currentAuthUser) {
-            console.log("Initial session found, fetching/validating profile...");
+      if (currentAuthUser) {
+        console.log("Initial session found, fetching/validating profile...");
             await fetchUserProfile(currentAuthUser.id); // Fetch profile if session exists
-          } else {
-            // No initial session, clear any potentially loaded profile from storage
+      } else {
+         // No initial session, clear any potentially loaded profile from storage
             if (profileLoadedFromStorage && Platform.OS !== 'web') {
               await SecureStore.deleteItemAsync(USER_PROFILE_KEY);
               console.log("No initial session, cleared profile loaded from storage.");
             }
              // Also clear React state if profile was loaded from storage
-             if (profileLoadedFromStorage) {
-                setUser(null); 
+         if (profileLoadedFromStorage) {
+            setUser(null);
              }
           }
         }
@@ -163,42 +163,42 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
        initializeAuth();
 
        // Setup the listener only on the client
-       const { data: { subscription } } = supabase.auth.onAuthStateChange(
-         async (event, newSession) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, newSession) => {
            console.log("Auth state change event:", event);
-           setSession(newSession);
-           const newAuthUser = newSession?.user ?? null;
-           setAuthUser(newAuthUser);
+        setSession(newSession);
+        const newAuthUser = newSession?.user ?? null;
+        setAuthUser(newAuthUser);
 
-           if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
-             if (newAuthUser) {
-               console.log(`Auth event ${event}, fetching profile...`);
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+          if (newAuthUser) {
+             console.log(`Auth event ${event}, fetching profile...`);
                setIsLoading(true); // Show loading while profile fetches after auth change
-               await fetchUserProfile(newAuthUser.id);
+             await fetchUserProfile(newAuthUser.id);
                setIsLoading(false);
-             } else {
-               console.warn(`Auth event ${event} but no auth user found.`);
+          } else {
+             console.warn(`Auth event ${event} but no auth user found.`);
                setUser(null);
                if (Platform.OS !== 'web') {
-                 await SecureStore.deleteItemAsync(USER_PROFILE_KEY);
+             await SecureStore.deleteItemAsync(USER_PROFILE_KEY);
                }
-             }
-           } else if (event === 'SIGNED_OUT') {
-             console.log("Auth event SIGNED_OUT, clearing profile.");
-             setUser(null);
+          }
+        } else if (event === 'SIGNED_OUT') {
+          console.log("Auth event SIGNED_OUT, clearing profile.");
+          setUser(null);
              if (Platform.OS !== 'web') {
-               await SecureStore.deleteItemAsync(USER_PROFILE_KEY);
+          await SecureStore.deleteItemAsync(USER_PROFILE_KEY);
              }
-           }
+        }
            // Ensure loading state is updated appropriately after events
            if (isLoading) setIsLoading(false);
-         }
-       );
+      }
+    );
 
-       // Cleanup subscription on unmount
-       return () => {
-         subscription?.unsubscribe();
-       };
+    // Cleanup subscription on unmount
+    return () => {
+      subscription?.unsubscribe();
+    };
     } else {
       // On the server, we don't interact with Supabase auth or storage.
       // Set loading to false immediately. The client will take over.
@@ -233,7 +233,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
        setSession(null);
        // Clear SecureStore ONLY ON NATIVE
        if (Platform.OS !== 'web') {
-         await SecureStore.deleteItemAsync(USER_PROFILE_KEY);
+       await SecureStore.deleteItemAsync(USER_PROFILE_KEY);
        }
     } finally {
       setIsLoading(false);
@@ -285,7 +285,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
        setSession(null);
        // Clear SecureStore ONLY ON NATIVE
        if (Platform.OS !== 'web') {
-         await SecureStore.deleteItemAsync(USER_PROFILE_KEY).catch(e => console.error("Failed to clear storage on logout", e));
+       await SecureStore.deleteItemAsync(USER_PROFILE_KEY).catch(e => console.error("Failed to clear storage on logout", e));
        }
       setIsLoading(false);
       // Navigation should be handled by RootLayout based on cleared auth state

@@ -9,13 +9,17 @@ const config = getDefaultConfig(__dirname);
 config.projectRoot = path.resolve(__dirname);
 
 // Get the default source extensions
-const defaultSourceExts = config.resolver.sourceExts || [];
+const defaultSourceExts = config.resolver?.sourceExts || [];
+// Get the default asset extensions
+const defaultAssetExts = config.resolver?.assetExts || [];
 
 // Add resolver options to improve module resolution
 config.resolver = {
   ...config.resolver,
   // Ensure mjs is included for newer package formats
   sourceExts: [...defaultSourceExts, 'mjs'],
+  // Ensure png is included in asset extensions
+  assetExts: [...defaultAssetExts.filter(ext => ext !== 'png'), 'png'],
   // Prioritize browser and module fields for web/ESM compatibility
   resolverMainFields: ['browser', 'module', 'main'],
   extraNodeModules: {

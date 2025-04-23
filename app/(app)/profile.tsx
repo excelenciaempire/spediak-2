@@ -19,15 +19,15 @@ export default function ProfileSettingsScreen() {
   // Will always return 'light'
   const colorScheme = useColorScheme();
   const navigation = useNavigation();
-  const { user, token, logout } = useAuth();
+  const { user, session, logout } = useAuth();
   
-  const [fullName, setFullName] = useState(user?.fullName || '');
+  const [fullName, setFullName] = useState(user?.full_name || '');
   const [email] = useState(user?.email || ''); // Email is read-only
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [state, setState] = useState(user?.state || 'North Carolina');
-  const [profileImageUrl, setProfileImageUrl] = useState<string | null>(user?.profileImageUrl || null);
+  const [profileImageUrl, setProfileImageUrl] = useState<string | null>(user?.profile_image_url || null);
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   
@@ -41,9 +41,9 @@ export default function ProfileSettingsScreen() {
   // Update local state when user data changes
   useEffect(() => {
     if (user) {
-      setFullName(user.fullName);
-      setState(user.state);
-      setProfileImageUrl(user.profileImageUrl);
+      setFullName(user.full_name || '');
+      setState(user.state || 'North Carolina');
+      setProfileImageUrl(user.profile_image_url || null);
     }
   }, [user]);
 
@@ -116,7 +116,7 @@ export default function ProfileSettingsScreen() {
   };
 
   const handleSaveProfile = async () => {
-    if (!validateProfile() || !user || !token) {
+    if (!validateProfile() || !user /* || !session?.access_token */) {
       return;
     }
     
@@ -126,11 +126,10 @@ export default function ProfileSettingsScreen() {
       const response = await userApi.updateProfile(
         user.id,
         {
-          fullName,
+          full_name: fullName,
           state,
-          profileImageUrl
-        },
-        token
+          profile_image_url: profileImageUrl
+        }
       );
       
       if (!response.success) {

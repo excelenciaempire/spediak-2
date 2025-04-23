@@ -65,13 +65,13 @@ export default function SignupScreen() {
   return (
     <ScrollView
       contentContainerStyle={styles.scrollContainer}
-      style={[styles.container, { backgroundColor: Colors[colorScheme as 'light' | 'dark'].background }]}
+      style={[styles.container, { backgroundColor: Colors[colorScheme].background }]}
     >
       <View style={styles.formContainer}>
-        <Text style={[styles.title, { color: Colors[colorScheme as 'light' | 'dark'].text }]}>
+        <Text style={[styles.title, { color: Colors[colorScheme].text }]}>
           Create Your Account
         </Text>
-        <Text style={[styles.subtitle, { color: Colors[colorScheme as 'light' | 'dark'].tabIconDefault }]}>
+        <Text style={[styles.subtitle, { color: Colors[colorScheme].tabIconDefault }]}>
           Please fill in the details below to get started
         </Text>
 
@@ -80,20 +80,20 @@ export default function SignupScreen() {
           <Ionicons 
             name="person-outline" 
             size={22} 
-            color={Colors[colorScheme as 'light' | 'dark'].tabIconDefault} 
+            color={Colors[colorScheme].tabIconDefault} 
             style={styles.inputIcon}
           />
           <TextInput
             style={[
               styles.input,
               { 
-                color: Colors[colorScheme as 'light' | 'dark'].text,
-                backgroundColor: Colors[colorScheme as 'light' | 'dark'].secondary,
+                color: Colors[colorScheme].text,
+                backgroundColor: Colors[colorScheme].secondary,
                 borderColor: '#eeeeee',
               }
             ]}
             placeholder="Full Name"
-            placeholderTextColor={Colors[colorScheme as 'light' | 'dark'].tabIconDefault}
+            placeholderTextColor={Colors[colorScheme].tabIconDefault}
             value={fullName}
             onChangeText={setFullName}
           />
@@ -104,20 +104,20 @@ export default function SignupScreen() {
           <Ionicons 
             name="mail-outline" 
             size={22} 
-            color={Colors[colorScheme as 'light' | 'dark'].tabIconDefault} 
+            color={Colors[colorScheme].tabIconDefault} 
             style={styles.inputIcon}
           />
           <TextInput
             style={[
               styles.input,
               { 
-                color: Colors[colorScheme as 'light' | 'dark'].text,
-                backgroundColor: Colors[colorScheme as 'light' | 'dark'].secondary,
+                color: Colors[colorScheme].text,
+                backgroundColor: Colors[colorScheme].secondary,
                 borderColor: '#eeeeee',
               }
             ]}
             placeholder="Email Address"
-            placeholderTextColor={Colors[colorScheme as 'light' | 'dark'].tabIconDefault}
+            placeholderTextColor={Colors[colorScheme].tabIconDefault}
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
@@ -130,20 +130,20 @@ export default function SignupScreen() {
           <Ionicons 
             name="lock-closed-outline" 
             size={22} 
-            color={Colors[colorScheme as 'light' | 'dark'].tabIconDefault} 
+            color={Colors[colorScheme].tabIconDefault} 
             style={styles.inputIcon}
           />
           <TextInput
             style={[
               styles.input,
               { 
-                color: Colors[colorScheme as 'light' | 'dark'].text,
-                backgroundColor: Colors[colorScheme as 'light' | 'dark'].secondary,
+                color: Colors[colorScheme].text,
+                backgroundColor: Colors[colorScheme].secondary,
                 borderColor: '#eeeeee',
               }
             ]}
             placeholder="Password"
-            placeholderTextColor={Colors[colorScheme as 'light' | 'dark'].tabIconDefault}
+            placeholderTextColor={Colors[colorScheme].tabIconDefault}
             value={password}
             onChangeText={setPassword}
             secureTextEntry={!passwordVisible}
@@ -155,7 +155,7 @@ export default function SignupScreen() {
             <Ionicons
               name={passwordVisible ? 'eye-off-outline' : 'eye-outline'}
               size={22}
-              color={Colors[colorScheme as 'light' | 'dark'].tabIconDefault}
+              color={Colors[colorScheme].tabIconDefault}
             />
           </TouchableOpacity>
         </View>
@@ -165,20 +165,20 @@ export default function SignupScreen() {
           <Ionicons 
             name="lock-closed-outline" 
             size={22} 
-            color={Colors[colorScheme as 'light' | 'dark'].tabIconDefault} 
+            color={Colors[colorScheme].tabIconDefault} 
             style={styles.inputIcon}
           />
           <TextInput
             style={[
               styles.input,
               { 
-                color: Colors[colorScheme as 'light' | 'dark'].text,
-                backgroundColor: Colors[colorScheme as 'light' | 'dark'].secondary,
+                color: Colors[colorScheme].text,
+                backgroundColor: Colors[colorScheme].secondary,
                 borderColor: '#eeeeee',
               }
             ]}
             placeholder="Confirm Password"
-            placeholderTextColor={Colors[colorScheme as 'light' | 'dark'].tabIconDefault}
+            placeholderTextColor={Colors[colorScheme].tabIconDefault}
             value={confirmPassword}
             onChangeText={setConfirmPassword}
             secureTextEntry={!passwordVisible}
@@ -190,14 +190,14 @@ export default function SignupScreen() {
           <Ionicons 
             name="location-outline" 
             size={22} 
-            color={Colors[colorScheme as 'light' | 'dark'].tabIconDefault} 
+            color={Colors[colorScheme].tabIconDefault} 
             style={styles.inputIcon}
           />
           <View 
             style={[
               styles.pickerContainer, 
               { 
-                backgroundColor: Colors[colorScheme as 'light' | 'dark'].secondary,
+                backgroundColor: Colors[colorScheme].secondary,
                 borderColor: '#eeeeee',
               }
             ]}
@@ -207,9 +207,9 @@ export default function SignupScreen() {
               onValueChange={(itemValue: string) => setState(itemValue)}
               style={[
                 styles.picker, 
-                { color: Colors[colorScheme as 'light' | 'dark'].text }
+                { color: Colors[colorScheme].text }
               ]}
-              dropdownIconColor={Colors[colorScheme as 'light' | 'dark'].text}
+              dropdownIconColor={Colors[colorScheme].text}
             >
               <Picker.Item label="North Carolina" value="North Carolina" />
               <Picker.Item label="South Carolina" value="South Carolina" />
@@ -219,13 +219,13 @@ export default function SignupScreen() {
 
         {/* Terms and Conditions */}
         <View style={styles.termsContainer}>
-          <Text style={[styles.termsText, { color: Colors[colorScheme as 'light' | 'dark'].text }]}>
+          <Text style={[styles.termsText, { color: Colors[colorScheme].text }]}>
             By signing up, you agree to our{' '}
-            <Text style={[styles.termsLink, { color: Colors[colorScheme as 'light' | 'dark'].accent }]}>
+            <Text style={[styles.termsLink, { color: Colors[colorScheme].accent }]}>
               Terms of Service
             </Text>{' '}
             and{' '}
-            <Text style={[styles.termsLink, { color: Colors[colorScheme as 'light' | 'dark'].accent }]}>
+            <Text style={[styles.termsLink, { color: Colors[colorScheme].accent }]}>
               Privacy Policy
             </Text>
           </Text>
@@ -235,7 +235,7 @@ export default function SignupScreen() {
         <TouchableOpacity
           style={[
             styles.signupButton,
-            { backgroundColor: Colors[colorScheme as 'light' | 'dark'].accent },
+            { backgroundColor: Colors[colorScheme].accent },
             isLoading && styles.signupButtonDisabled
           ]}
           onPress={handleSignup}
@@ -251,9 +251,9 @@ export default function SignupScreen() {
           style={styles.loginLinkContainer}
           onPress={() => router.back()}
         >
-          <Text style={[styles.loginLinkText, { color: Colors[colorScheme as 'light' | 'dark'].text }]}>
+          <Text style={[styles.loginLinkText, { color: Colors[colorScheme].text }]}>
             Already have an account?{' '}
-            <Text style={[styles.loginLink, { color: Colors[colorScheme as 'light' | 'dark'].accent }]}>
+            <Text style={[styles.loginLink, { color: Colors[colorScheme].accent }]}>
               Sign In
             </Text>
           </Text>

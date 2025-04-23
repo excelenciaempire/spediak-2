@@ -174,8 +174,8 @@ export default function NewInspectionScreen() {
       } else {
         // --- NATIVE --- 
         // Fetch the file URI and get ArrayBuffer
-        const response = await fetch(uri);
-        if (!response.ok) throw new Error('Failed to fetch local image file.');
+      const response = await fetch(uri);
+      if (!response.ok) throw new Error('Failed to fetch local image file.');
         fileData = await response.arrayBuffer(); // Get ArrayBuffer for native upload
         console.log("Native fetch successful, got ArrayBuffer");
       }
@@ -515,15 +515,15 @@ export default function NewInspectionScreen() {
               pickImage(); 
             } else {
               // On native, show options alert
-              Alert.alert(
-                'Upload Image', 
-                'Choose an option', 
-                [
-                  {text: 'Take Photo', onPress: takePhoto},
-                  {text: 'Choose from Gallery', onPress: pickImage},
-                  {text: 'Cancel', style: 'cancel'}
-                ]
-              );
+            Alert.alert(
+              'Upload Image', 
+              'Choose an option', 
+              [
+                {text: 'Take Photo', onPress: takePhoto},
+                {text: 'Choose from Gallery', onPress: pickImage},
+                {text: 'Cancel', style: 'cancel'}
+              ]
+            );
             }
           }}
         >

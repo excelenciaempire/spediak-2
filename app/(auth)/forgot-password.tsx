@@ -42,22 +42,22 @@ export default function ForgotPasswordScreen() {
 
   if (isSubmitted) {
     return (
-      <View style={[styles.container, { backgroundColor: Colors[colorScheme as 'light' | 'dark'].background }]}>
+      <View style={[styles.container, { backgroundColor: Colors[colorScheme].background }]}>
         <View style={styles.successContainer}>
           <Ionicons 
             name="checkmark-circle" 
             size={80} 
-            color={Colors[colorScheme as 'light' | 'dark'].accent} 
+            color={Colors[colorScheme].accent} 
           />
-          <Text style={[styles.successTitle, { color: Colors[colorScheme as 'light' | 'dark'].text }]}>
+          <Text style={[styles.successTitle, { color: Colors[colorScheme].text }]}>
             Reset Link Sent
           </Text>
-          <Text style={[styles.successMessage, { color: Colors[colorScheme as 'light' | 'dark'].tabIconDefault }]}>
+          <Text style={[styles.successMessage, { color: Colors[colorScheme].tabIconDefault }]}>
             We've sent password reset instructions to {email}. Please check your email inbox.
           </Text>
 
           <TouchableOpacity
-            style={[styles.backButton, { backgroundColor: Colors[colorScheme as 'light' | 'dark'].accent }]}
+            style={[styles.backButton, { backgroundColor: Colors[colorScheme].accent }]}
             onPress={handleBackToLogin}
           >
             <Text style={styles.backButtonText}>
@@ -70,12 +70,12 @@ export default function ForgotPasswordScreen() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: Colors[colorScheme as 'light' | 'dark'].background }]}>
+    <View style={[styles.container, { backgroundColor: Colors[colorScheme].background }]}>
       <View style={styles.formContainer}>
-        <Text style={[styles.title, { color: Colors[colorScheme as 'light' | 'dark'].text }]}>
+        <Text style={[styles.title, { color: Colors[colorScheme].text }]}>
           Reset Password
         </Text>
-        <Text style={[styles.subtitle, { color: Colors[colorScheme as 'light' | 'dark'].tabIconDefault }]}>
+        <Text style={[styles.subtitle, { color: Colors[colorScheme].tabIconDefault }]}>
           Enter your email and we'll send you instructions to reset your password
         </Text>
 
@@ -84,20 +84,20 @@ export default function ForgotPasswordScreen() {
           <Ionicons 
             name="mail-outline" 
             size={22} 
-            color={Colors[colorScheme as 'light' | 'dark'].tabIconDefault} 
+            color={Colors[colorScheme].tabIconDefault} 
             style={styles.inputIcon}
           />
           <TextInput
             style={[
               styles.input,
               { 
-                color: Colors[colorScheme as 'light' | 'dark'].text,
-                backgroundColor: Colors[colorScheme as 'light' | 'dark'].secondary,
+                color: Colors[colorScheme].text,
+                backgroundColor: Colors[colorScheme].secondary,
                 borderColor: '#eeeeee',
               }
             ]}
             placeholder="Email Address"
-            placeholderTextColor={Colors[colorScheme as 'light' | 'dark'].tabIconDefault}
+            placeholderTextColor={Colors[colorScheme].tabIconDefault}
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
@@ -109,7 +109,7 @@ export default function ForgotPasswordScreen() {
         <TouchableOpacity
           style={[
             styles.resetButton,
-            { backgroundColor: Colors[colorScheme as 'light' | 'dark'].accent },
+            { backgroundColor: Colors[colorScheme].accent },
             isLoading && styles.resetButtonDisabled
           ]}
           onPress={handleResetPassword}
@@ -125,9 +125,9 @@ export default function ForgotPasswordScreen() {
           style={styles.loginLinkContainer}
           onPress={handleBackToLogin}
         >
-          <Text style={[styles.loginLinkText, { color: Colors[colorScheme as 'light' | 'dark'].text }]}>
+          <Text style={[styles.loginLinkText, { color: Colors[colorScheme].text }]}>
             Remember your password?{' '}
-            <Text style={[styles.loginLink, { color: Colors[colorScheme as 'light' | 'dark'].accent }]}>
+            <Text style={[styles.loginLink, { color: Colors[colorScheme].accent }]}>
               Sign In
             </Text>
           </Text>

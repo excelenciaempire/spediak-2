@@ -39,17 +39,17 @@ export default function LogoutScreen() {
     <View 
       style={[
         styles.container, 
-        { backgroundColor: Colors[colorScheme as 'light' | 'dark'].background }
+        { backgroundColor: Colors[colorScheme].background }
       ]}
     >
       <ActivityIndicator 
         size="large" 
-        color={Colors[colorScheme as 'light' | 'dark'].accent} 
+        color={Colors[colorScheme].accent} 
       />
       <Text 
         style={[
           styles.message, 
-          { color: Colors[colorScheme as 'light' | 'dark'].text }
+          { color: Colors[colorScheme].text }
         ]}
       >
         Logging you out...

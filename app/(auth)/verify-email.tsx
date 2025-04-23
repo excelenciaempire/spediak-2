@@ -34,29 +34,29 @@ export default function VerifyEmailScreen() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: Colors[colorScheme as 'light' | 'dark'].background }]}>
+    <View style={[styles.container, { backgroundColor: Colors[colorScheme].background }]}>
       <View style={styles.contentContainer}>
         <Ionicons 
           name="mail" 
           size={80} 
-          color={Colors[colorScheme as 'light' | 'dark'].accent} 
+          color={Colors[colorScheme].accent} 
         />
-        <Text style={[styles.title, { color: Colors[colorScheme as 'light' | 'dark'].text }]}>
+        <Text style={[styles.title, { color: Colors[colorScheme].text }]}>
           Verify Your Email
         </Text>
-        <Text style={[styles.message, { color: Colors[colorScheme as 'light' | 'dark'].tabIconDefault }]}>
+        <Text style={[styles.message, { color: Colors[colorScheme].tabIconDefault }]}>
           We've sent a verification link to {mockEmail}. Please check your email and verify your account.
         </Text>
 
         <TouchableOpacity
           style={[
             styles.resendButton,
-            { borderColor: Colors[colorScheme as 'light' | 'dark'].accent },
+            { borderColor: Colors[colorScheme].accent },
           ]}
           onPress={handleResendEmail}
           disabled={isResending}
         >
-          <Text style={[styles.resendButtonText, { color: Colors[colorScheme as 'light' | 'dark'].accent }]}>
+          <Text style={[styles.resendButtonText, { color: Colors[colorScheme].accent }]}>
             {isResending ? 'Sending...' : 'Resend Email'}
           </Text>
         </TouchableOpacity>
@@ -64,7 +64,7 @@ export default function VerifyEmailScreen() {
         <TouchableOpacity
           style={[
             styles.continueButton,
-            { backgroundColor: Colors[colorScheme as 'light' | 'dark'].accent },
+            { backgroundColor: Colors[colorScheme].accent },
           ]}
           onPress={handleContinueToLogin}
         >
@@ -78,7 +78,7 @@ export default function VerifyEmailScreen() {
           style={styles.skipButton}
           onPress={handleSkipVerification}
         >
-          <Text style={[styles.skipButtonText, { color: Colors[colorScheme as 'light' | 'dark'].tabIconDefault }]}>
+          <Text style={[styles.skipButtonText, { color: Colors[colorScheme].tabIconDefault }]}>
             (Demo) Skip Verification
           </Text>
         </TouchableOpacity>
